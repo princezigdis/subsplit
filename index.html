@@ -1,0 +1,1050 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>SubSplit</title>
+<meta name="description" content="Split premium subscriptions with verified hosts and pay only for your seat.">
+<meta name="theme-color" content="#5B5BD6">
+<link rel="icon" href="logo-mark.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700;12..96,800&family=Figtree:wght@400;500;600;700&display=swap">
+<!--
+  SUBSPLIT · customer app
+  Explore · My Subs · Wallet · Account. There is no admin code in this file.
+  Data comes from the database through api.js; every rule (prices, seats,
+  markup, money) is checked again on the server.
+  Edit colours under "COLOURS". Edit your keys in config.js.
+-->
+<style>
+/* COLOURS. Layout: one phone-width column, sticky top bar, tab bar fixed at the bottom. */
+:root{
+  --bg:#F6F6FB; --surface:#FFFFFF; --surface-2:#F0F0F8; --ink:#17172B; --muted:#6B6B85; --line:#E6E6F0;
+  --brand:#5B5BD6; --brand-ink:#FFFFFF; --brand-soft:#ECECFD; --brand-strong:#3F3FB0;
+  --accent:#FFB547; --accent-soft:#FFF1D9; --accent-ink:#7A4A00;
+  --good:#14905F; --good-soft:#E1F5EC; --warn:#A15C00; --warn-soft:#FFF1D9; --bad:#C93A3A; --bad-soft:#FDE7E7;
+  --scrim:rgba(23,23,43,.45); --shadow:0 1px 2px rgba(23,23,43,.04),0 8px 24px rgba(23,23,43,.05);
+  --f-display:'Bricolage Grotesque','Segoe UI',system-ui,sans-serif;
+  --f-body:'Figtree',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+  --r-lg:22px; --r:16px; --r-sm:12px; --nav-h:66px;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0F0F1A; --surface:#181826; --surface-2:#212134; --ink:#ECECF6; --muted:#9C9CB8; --line:#2B2B42;
+  --brand:#8B8BFF; --brand-ink:#0F0F1A; --brand-soft:#252550; --brand-strong:#BDBDFF;
+  --accent:#FFC46B; --accent-soft:#3A2C12; --accent-ink:#FFD79A;
+  --good:#5AD39B; --good-soft:#15352A; --warn:#F5BC5B; --warn-soft:#3A2C12; --bad:#FF8A8A; --bad-soft:#3E1C1F;
+  --scrim:rgba(0,0,0,.6); --shadow:0 1px 2px rgba(0,0,0,.3); color-scheme:dark;
+}}
+:root[data-theme="dark"]{
+  --bg:#0F0F1A; --surface:#181826; --surface-2:#212134; --ink:#ECECF6; --muted:#9C9CB8; --line:#2B2B42;
+  --brand:#8B8BFF; --brand-ink:#0F0F1A; --brand-soft:#252550; --brand-strong:#BDBDFF;
+  --accent:#FFC46B; --accent-soft:#3A2C12; --accent-ink:#FFD79A;
+  --good:#5AD39B; --good-soft:#15352A; --warn:#F5BC5B; --warn-soft:#3A2C12; --bad:#FF8A8A; --bad-soft:#3E1C1F;
+  --scrim:rgba(0,0,0,.6); --shadow:0 1px 2px rgba(0,0,0,.3); color-scheme:dark;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 var(--f-body);-webkit-font-smoothing:antialiased}
+button{font:inherit;color:inherit}
+h1,h2,h3{font-family:var(--f-display);margin:0;text-wrap:balance;letter-spacing:-.015em}
+p{margin:0}
+a{color:var(--brand-strong)}
+:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
+.ic{width:20px;height:20px;flex:none}
+.muted{color:var(--muted)} .sm{font-size:14px} .xs{font-size:12.5px} .b{font-weight:700}
+.grow{flex:1;min-width:0}
+.row{display:flex;align-items:center;gap:12px}
+.between{justify-content:space-between}
+.wrap-row{display:flex;flex-wrap:wrap;gap:8px}
+.num{font-variant-numeric:tabular-nums}
+
+/* top bar */
+.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:30;background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:saturate(1.3) blur(12px);-webkit-backdrop-filter:saturate(1.3) blur(12px)}
+.top-in{max-width:600px;margin-inline:auto;padding:12px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px}
+.logo{display:flex;align-items:center;gap:10px;background:none;border:0;padding:0;cursor:pointer}
+.logo svg{width:34px;height:34px;flex:none}
+.wordmark{font:800 22px/1 var(--f-display);letter-spacing:-.03em;color:var(--ink)}
+.wordmark b{color:var(--brand);font-weight:800}
+.icon-btn{position:relative;width:42px;height:42px;border-radius:50%;border:1px solid var(--line);background:var(--surface);display:grid;place-items:center;cursor:pointer;color:var(--ink)}
+.icon-btn .dotn{position:absolute;top:-2px;right:-2px;min-width:18px;height:18px;border-radius:99px;background:var(--bad);color:#fff;font-size:11px;font-weight:800;display:grid;place-items:center;padding:0 5px}
+
+/* shell */
+.shell{max-width:600px;margin-inline:auto;padding-inline:16px;padding-top:8px;padding-bottom:calc(var(--nav-h) + 40px + env(safe-area-inset-bottom,0px));display:grid;gap:20px}
+.notice{background:var(--brand-soft);color:var(--brand-strong);border-radius:var(--r);padding:12px 14px;font-size:14px;font-weight:600}
+
+/* buttons */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;border:1px solid transparent;background:var(--surface-2);color:var(--ink);padding:12px 18px;border-radius:999px;font-weight:700;font-size:15px;cursor:pointer;line-height:1.2;min-height:46px;text-decoration:none}
+.btn.primary{background:var(--brand);color:var(--brand-ink)}
+.btn.soft{background:var(--brand-soft);color:var(--brand-strong)}
+.btn.line{background:transparent;border-color:var(--line)}
+.btn.danger{background:var(--bad-soft);color:var(--bad)}
+.btn.sm{min-height:38px;padding:8px 14px;font-size:14px}
+.btn.block{width:100%}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.link{background:none;border:0;padding:0;color:var(--brand-strong);font-weight:700;cursor:pointer;font-size:14px;text-align:left}
+
+/* hero */
+.hero{background:var(--surface);border-radius:var(--r-lg);padding:24px 20px;display:grid;gap:12px;box-shadow:var(--shadow);position:relative;overflow:hidden}
+.hero::after{content:"";position:absolute;right:-70px;top:-70px;width:160px;height:160px;border-radius:50%;background:var(--brand-soft)}
+.hero::before{content:"";position:absolute;right:56px;top:-26px;width:64px;height:64px;border-radius:50%;background:var(--accent-soft)}
+.hero>*{position:relative;z-index:1}
+.eyebrow{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--brand-strong)}
+.eyebrow .ic{width:16px;height:16px}
+.hero h1{font-size:clamp(28px,7.6vw,40px);line-height:1.08;font-weight:800;max-width:15ch}
+.hero p{color:var(--muted);max-width:42ch}
+.hero-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:4px}
+
+/* search + chips */
+.searchbar{display:flex;gap:8px}
+.search{flex:1;display:flex;align-items:center;gap:10px;background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:0 16px;min-width:0}
+.search .ic{color:var(--muted)}
+.search input{border:0;background:transparent;padding:13px 0;font:inherit;font-size:16px;color:var(--ink);width:100%;outline:none;min-width:0}
+.chips{display:flex;gap:8px;flex-wrap:wrap}
+.chips.scroll{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;margin-inline:-16px;padding-inline:16px}
+.chips.scroll::-webkit-scrollbar{display:none}
+.chip{border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:999px;padding:8px 15px;font-weight:600;font-size:14px;white-space:nowrap;cursor:pointer;display:inline-flex;gap:6px;align-items:center}
+.chip[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.chip .n{opacity:.6;font-weight:700}
+.sec-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:-6px}
+.sec-head h2{font-size:21px}
+
+/* cards */
+.list{display:grid;gap:12px}
+.card{background:var(--surface);border-radius:var(--r-lg);padding:18px;box-shadow:var(--shadow);display:grid;gap:12px;min-width:0}
+.card.tap{cursor:pointer}
+.card h3{font-size:17px;line-height:1.25}
+.tile{width:46px;height:46px;border-radius:14px;display:grid;place-items:center;font:800 19px var(--f-display);flex:none;box-shadow:inset 0 0 0 1px rgba(0,0,0,.06);overflow:hidden}
+.tile img{width:100%;height:100%;object-fit:cover}
+.tile.lg{width:56px;height:56px;border-radius:16px;font-size:23px}
+.save{background:var(--accent-soft);color:var(--accent-ink);font-weight:800;font-size:12px;padding:4px 9px;border-radius:999px;white-space:nowrap}
+.price-row{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.price{font:800 22px/1 var(--f-display);letter-spacing:-.02em}
+.price small{font:500 13px var(--f-body);color:var(--muted);margin-left:2px;letter-spacing:0}
+s.was{color:var(--muted);font-size:14px}
+.seats{display:flex;gap:5px}
+.seats i{flex:1;height:7px;border-radius:99px;background:var(--brand)}
+.seats i.free{background:var(--surface-2);box-shadow:inset 0 0 0 1px var(--line)}
+.host{display:inline-flex;align-items:center;gap:4px}
+.host .ic{width:15px;height:15px;color:var(--brand)}
+.meta{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:13.5px;color:var(--muted)}
+.low{color:var(--warn);font-weight:700}
+.pill{display:inline-flex;align-items:center;padding:3px 10px;border-radius:999px;font-size:12px;font-weight:700;white-space:nowrap}
+.pill.good{background:var(--good-soft);color:var(--good)}
+.pill.warn{background:var(--warn-soft);color:var(--warn)}
+.pill.bad{background:var(--bad-soft);color:var(--bad)}
+.pill.neutral{background:var(--surface-2);color:var(--muted)}
+.pill.brand{background:var(--brand-soft);color:var(--brand-strong)}
+.bar{height:7px;background:var(--surface-2);border-radius:99px;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--brand);border-radius:99px}
+.empty{text-align:center;color:var(--muted);padding:32px 20px;border:1.5px dashed var(--line);border-radius:var(--r-lg);display:grid;gap:12px;justify-items:center}
+.dates{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.dates div{background:var(--surface-2);border-radius:var(--r-sm);padding:8px 10px;display:grid}
+.dates span{font-size:11.5px;color:var(--muted);font-weight:600}
+.dates b{font-size:14px}
+
+/* steps */
+.steps{list-style:none;margin:0;padding:0;display:grid;gap:16px;counter-reset:s}
+.steps li{display:grid;grid-template-columns:36px 1fr;column-gap:12px;counter-increment:s}
+.steps li::before{content:counter(s);grid-row:span 2;width:36px;height:36px;border-radius:50%;background:var(--brand-soft);color:var(--brand-strong);display:grid;place-items:center;font:800 16px var(--f-display)}
+.steps b{font-weight:700}
+.steps span{color:var(--muted);font-size:14px}
+
+.ptitle{display:flex;align-items:center;justify-content:space-between;gap:12px;padding-top:4px}
+.ptitle h1{font-size:28px;font-weight:800}
+
+/* money */
+.money{background:var(--brand);color:var(--brand-ink);border-radius:var(--r-lg);padding:20px;display:grid;gap:14px}
+.money .lbl{font-size:13px;opacity:.85;display:flex;align-items:center;justify-content:space-between}
+.money .big{font:800 34px/1 var(--f-display);letter-spacing:-.02em}
+.money .two{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.money .btn{background:var(--brand-ink);color:var(--brand)}
+.money .btn.ghost{background:transparent;color:var(--brand-ink);border-color:color-mix(in srgb,var(--brand-ink) 40%,transparent)}
+.eye{background:none;border:0;color:inherit;cursor:pointer;padding:4px;display:grid}
+.quad{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.quad div{background:var(--surface-2);border-radius:var(--r-sm);padding:10px 12px;display:grid;gap:2px}
+.quad span{font-size:12px;color:var(--muted);font-weight:600}
+.quad b{font:800 18px var(--f-display)}
+
+/* rows */
+.rows-list{background:var(--surface);border-radius:var(--r-lg);box-shadow:var(--shadow);overflow:hidden}
+.rows-list>div{display:flex;align-items:center;gap:12px;padding:14px 16px;border-bottom:1px solid var(--line)}
+.rows-list>div:last-child{border-bottom:0}
+.dot{width:38px;height:38px;border-radius:50%;display:grid;place-items:center;flex:none}
+.dot .ic{width:18px;height:18px}
+.dot.in{background:var(--good-soft);color:var(--good)}
+.dot.out{background:var(--surface-2);color:var(--muted)}
+.amt{font-weight:800;text-align:right;white-space:nowrap}
+.amt.in{color:var(--good)}
+
+/* forms */
+.form{display:grid;gap:16px}
+.field{display:grid;gap:6px;min-width:0}
+.field label,.lbl2{font-size:14px;font-weight:700}
+.field small{color:var(--muted);font-size:13px}
+input,select,textarea{font:inherit;font-size:16px;color:var(--ink);background:var(--surface-2);border:1.5px solid transparent;border-radius:var(--r-sm);padding:12px 14px;width:100%}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--brand);background:var(--surface)}
+input[type=file]{padding:10px;font-size:14px}
+textarea{min-height:100px;resize:vertical}
+.check{display:flex;gap:10px;align-items:flex-start;font-size:14px;cursor:pointer}
+.check input{width:20px;height:20px;margin:1px 0 0;flex:none;accent-color:var(--brand)}
+.tip{background:var(--surface-2);border-radius:var(--r-sm);padding:12px 14px;font-size:14px;color:var(--muted)}
+.tip.warn{background:var(--warn-soft);color:var(--warn)}
+.info{display:grid;border-radius:var(--r);background:var(--surface-2);overflow:hidden}
+.info>div{display:flex;gap:12px;align-items:flex-start;padding:12px 14px;border-bottom:1px solid var(--line)}
+.info>div:last-child{border-bottom:0}
+.info .ic{color:var(--brand);margin-top:2px}
+.info b{display:block;font-size:14px}
+.info span{font-size:14px;color:var(--muted)}
+.kv{display:grid;border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
+.kv>div{display:flex;justify-content:space-between;gap:12px;padding:11px 14px;border-bottom:1px solid var(--line);font-size:15px}
+.kv>div:last-child{border-bottom:0}
+.kv span{color:var(--muted)}
+.kv b{text-align:right}
+.kv .total{background:var(--brand-soft);color:var(--brand-strong)}
+.kv .total span{color:var(--brand-strong)}
+.secret{white-space:pre-wrap;background:var(--surface-2);border-radius:var(--r);padding:14px;font-size:15px;overflow-wrap:anywhere}
+.tabs{display:flex;gap:4px;background:var(--surface-2);border-radius:999px;padding:4px}
+.tabs button{flex:1;border:0;background:transparent;border-radius:999px;padding:10px;font-weight:700;font-size:14px;cursor:pointer;color:var(--muted)}
+.tabs button[aria-selected="true"]{background:var(--surface);color:var(--ink);box-shadow:var(--shadow)}
+.svc-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:8px}
+.svc-grid button{background:var(--surface-2);border:1.5px solid transparent;border-radius:var(--r);padding:12px 8px;display:grid;justify-items:center;gap:6px;cursor:pointer;font-size:13px;font-weight:700;text-align:center}
+.svc-grid button[aria-pressed="true"]{border-color:var(--brand);background:var(--brand-soft)}
+.stepno{display:flex;align-items:center;gap:8px;font:800 15px var(--f-display)}
+.stepno i{font-style:normal;width:26px;height:26px;border-radius:50%;background:var(--brand);color:var(--brand-ink);display:grid;place-items:center;font-size:13px}
+
+/* profile + faq */
+.avatar{width:56px;height:56px;border-radius:50%;background:var(--brand-soft);color:var(--brand-strong);display:grid;place-items:center;font:800 20px var(--f-display);flex:none}
+details.card summary{cursor:pointer;font-weight:700;list-style:none;display:flex;justify-content:space-between;align-items:center;gap:12px}
+details.card summary::after{content:"+";font-size:22px;color:var(--muted)}
+details.card[open] summary::after{content:"–"}
+details.card p,details.card ul{color:var(--muted);font-size:14px;margin:0}
+details.card ul{padding-left:18px;display:grid;gap:6px}
+.menu{background:var(--surface);border-radius:var(--r-lg);box-shadow:var(--shadow);overflow:hidden}
+.menu button{width:100%;display:flex;align-items:center;gap:12px;padding:15px 16px;background:none;border:0;border-bottom:1px solid var(--line);cursor:pointer;text-align:left;font-weight:600}
+.menu button:last-child{border-bottom:0}
+.menu .ic{color:var(--brand)}
+.msg{padding:10px 14px;border-radius:14px;max-width:85%;font-size:14px;white-space:pre-wrap}
+.msg.me{background:var(--brand-soft);justify-self:end}
+.msg.them{background:var(--surface-2)}
+
+/* bottom nav */
+.nav{position:fixed;left:0;right:0;bottom:0;z-index:40;background:color-mix(in srgb,var(--surface) 94%,transparent);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom,0px)}
+.nav-in{max-width:600px;margin-inline:auto;display:flex;height:var(--nav-h)}
+.nav button{flex:1;background:none;border:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;color:var(--muted);font-size:11.5px;font-weight:600;cursor:pointer}
+.nav button .ic{width:22px;height:22px}
+.nav button[aria-current="page"]{color:var(--brand)}
+
+/* sheet */
+.sheet-wrap{position:fixed;inset:0;z-index:60;background:var(--scrim);display:flex;align-items:flex-end;justify-content:center}
+.sheet{background:var(--surface);width:100%;max-width:600px;max-height:92vh;overflow:auto;border-radius:26px 26px 0 0;padding:10px 20px calc(24px + env(safe-area-inset-bottom,0px));display:grid;gap:18px;animation:up .22s ease-out}
+.sheet .grab{width:42px;height:5px;border-radius:9px;background:var(--line);justify-self:center}
+.sheet h2{font-size:23px}
+.sheet .x{background:var(--surface-2);border:0;width:36px;height:36px;border-radius:50%;display:grid;place-items:center;cursor:pointer;color:var(--muted);flex:none}
+@keyframes up{from{transform:translateY(40px)}to{transform:none}}
+@media (min-width:700px){.sheet-wrap{align-items:center;padding:16px}.sheet{border-radius:26px}}
+.ok-mark{width:60px;height:60px;border-radius:50%;background:var(--good-soft);color:var(--good);display:grid;place-items:center;justify-self:center}
+.ok-mark.bad{background:var(--bad-soft);color:var(--bad)}
+.ok-mark .ic{width:30px;height:30px}
+#toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(var(--nav-h) + 16px + env(safe-area-inset-bottom,0px));z-index:80;background:var(--ink);color:var(--bg);padding:12px 18px;border-radius:14px;font-weight:600;font-size:14px;max-width:calc(100% - 32px);box-shadow:0 10px 30px rgba(0,0,0,.2)}
+.center-screen{min-height:80vh;display:grid;place-items:center;padding:16px}
+.foot{text-align:center;color:var(--muted);font-size:13px;display:grid;gap:4px;padding-top:8px}
+@media (prefers-reduced-motion: reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div id="app"><div class="center-screen muted">Loading…</div></div>
+<div id="sheet" class="sheet-wrap" hidden><div class="sheet" id="sheet-box" role="dialog" aria-modal="true"></div></div>
+<div id="toast" role="status" hidden></div>
+
+<script src="config.js"></script>
+<script src="api.js"></script>
+<script>
+/* =====================================================================
+   SubSplit customer app
+   ===================================================================== */
+const $ = (s, r = document) => r.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const naira = k => { k = Number(k) || 0; const f = k % 100 !== 0; return '₦' + (k / 100).toLocaleString('en-NG', {minimumFractionDigits: f ? 2 : 0, maximumFractionDigits: 2}); };
+const toKobo = v => Math.round((parseFloat(String(v).replace(/[,₦\s]/g, '')) || 0) * 100);
+const ts = x => new Date(x).getTime();
+const fmtDate = t => new Date(t).toLocaleDateString('en-GB', {day:'numeric', month:'short', year:'numeric'});
+const fmtShort = t => new Date(t).toLocaleDateString('en-GB', {day:'numeric', month:'short'});
+const fmtDT = t => new Date(t).toLocaleString('en-GB', {day:'numeric', month:'short', hour:'numeric', minute:'2-digit'});
+const DAY = 864e5;
+const daysLeft = m => Math.max(0, Math.ceil((ts(m.ends_at) - Date.now()) / DAY));
+const initials = n => (n || '?').split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0].toUpperCase()).join('');
+const per = d => d === 30 ? '/month' : `/${d} days`;
+function textOn(hex){ const h = (hex || '#5B5BD6').replace('#', ''); const [r, g, b] = [0, 2, 4].map(i => parseInt(h.substr(i, 2), 16) / 255); return (0.2126*r + 0.7152*g + 0.0722*b) > 0.62 ? '#1A1A1A' : '#FFFFFF'; }
+// Display-only estimate. The database calculates the real price again.
+const seatPrice = (normal, seats, markup) => Math.round(normal * (100 + markup) / 100 / seats / 100) * 100;
+
+const ACCESS = {
+  LOGIN:  {label:'Shared login',     icon:'key',   ask:'',                                    how:'The host shares a login. You use only your own profile.'},
+  INVITE: {label:'Invite',           icon:'mail',  ask:'Email for your invite',               how:'The host invites your own account by email.'},
+  FAMILY: {label:'Family invite',    icon:'mail',  ask:'Email for your family invite',        how:'The host adds your own account to their family plan.'},
+  TEAM:   {label:'Team invite',      icon:'mail',  ask:'Email for your team invite',          how:'The host adds your own account to their team.'},
+  DATA:   {label:'Data to your line',icon:'phone', ask:'Phone number to receive data',        how:'The host sends data straight to your phone number.'},
+  OTHER:  {label:'Host instructions',icon:'chat',  ask:'Email or phone the host should use',  how:'The host gives you access as described in the plan.'}
+};
+const needsContact = t => t !== 'LOGIN';
+
+const ICONS = {
+  compass:'<circle cx="12" cy="12" r="9"/><path d="m15.5 8.5-2 5-5 2 2-5z"/>',
+  layers:'<path d="m12 3 9 5-9 5-9-5z"/><path d="m3 13 9 5 9-5"/>',
+  wallet:'<path d="M19 7V5.5A1.5 1.5 0 0 0 17.5 4h-12A2.5 2.5 0 0 0 3 6.5v11A2.5 2.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V9a1.5 1.5 0 0 0-1.5-1.5H5.5A2.5 2.5 0 0 1 3 6.5"/><circle cx="16" cy="13.8" r="1.2"/>',
+  user:'<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
+  search:'<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
+  plus:'<path d="M12 5v14M5 12h14"/>', check:'<path d="m5 12.5 4.5 4.5L19 7.5"/>',
+  badge:'<path d="M12 2.8l2.4 1.7 2.9-.2.9 2.8 2.4 1.7-1 2.7 1 2.7-2.4 1.7-.9 2.8-2.9-.2L12 21.2l-2.4-1.7-2.9.2-.9-2.8-2.4-1.7 1-2.7-1-2.7 2.4-1.7.9-2.8 2.9.2z" fill="currentColor" stroke="none"/><path d="m8.8 12.2 2.2 2.2 4.2-4.4" stroke="var(--surface)" stroke-width="2"/>',
+  users:'<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.6a3.5 3.5 0 0 1 0 6.8M18 14a6.5 6.5 0 0 1 3.5 6"/>',
+  key:'<circle cx="8" cy="15" r="4"/><path d="m11 12 9-9M16.5 6.5l3 3"/>', mail:'<rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="m3.5 7 8.5 6 8.5-6"/>',
+  phone:'<rect x="7" y="2.5" width="10" height="19" rx="2.5"/><path d="M11 18h2"/>', clock:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+  lock:'<rect x="5" y="11" width="14" height="10" rx="2.5"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
+  eye:'<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
+  eyeoff:'<path d="M3 3l18 18M10.6 5.1A10 10 0 0 1 12 5c6.4 0 10 7 10 7a17 17 0 0 1-3.2 4.1M6.6 6.6C3.8 8.4 2 12 2 12s3.6 7 10 7a9.6 9.6 0 0 0 4.4-1"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/>',
+  share:'<circle cx="18" cy="5.5" r="2.5"/><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="18.5" r="2.5"/><path d="m8.2 10.8 7.6-4M8.2 13.2l7.6 4"/>',
+  x:'<path d="M6 6l12 12M18 6 6 18"/>', down:'<path d="M12 5v14M6 13l6 6 6-6"/>', up:'<path d="M12 19V5M6 11l6-6 6 6"/>',
+  copy:'<rect x="8" y="8" width="12" height="12" rx="2.5"/><path d="M16 8V6.5A2.5 2.5 0 0 0 13.5 4h-7A2.5 2.5 0 0 0 4 6.5v7A2.5 2.5 0 0 0 6.5 16H8"/>',
+  chat:'<path d="M4 19.5 5.3 16A8 8 0 1 1 8 18.7z"/>', bell:'<path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20.5a2 2 0 0 0 4 0"/>',
+  help:'<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6v.6M12 17h.01"/>',
+  edit:'<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="m13.5 6.5 4 4"/>', filter:'<path d="M4 6h16M7 12h10M10 18h4"/>',
+  out:'<path d="M15 4h3.5A1.5 1.5 0 0 1 20 5.5v13a1.5 1.5 0 0 1-1.5 1.5H15"/><path d="M10 8l-4 4 4 4M6 12h10"/>',
+  shield:'<path d="M12 3 4.5 6v5.5c0 4.5 3.2 8 7.5 9.5 4.3-1.5 7.5-5 7.5-9.5V6z"/><path d="m9 12 2.2 2.2L15.5 10"/>',
+  upload:'<path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v2.5A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V16"/>'
+};
+const ic = (n, cls = '') => `<svg class="ic ${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[n] || ''}</svg>`;
+const LOGO = `<svg viewBox="0 0 40 40" aria-hidden="true"><rect width="40" height="40" rx="12" fill="var(--brand)"/><path d="M19 10a10 10 0 0 0 0 20z" fill="#fff"/><path d="M22 13a10 10 0 0 1 0 20z" fill="var(--accent)"/></svg>`;
+function wordmark(name){ const n = esc(name || 'SubSplit'), i = n.toLowerCase().lastIndexOf('split'); return i > 0 ? `${n.slice(0, i)}<b>${n.slice(i)}</b>` : n; }
+function tile(o, big){
+  const c = o.logo_color || '#5B5BD6';
+  if (o.logo_url) return `<span class="tile ${big ? 'lg' : ''}" style="background:${esc(c)}"><img src="${esc(o.logo_url)}" alt=""></span>`;
+  return `<span class="tile ${big ? 'lg' : ''}" style="background:${esc(c)};color:${textOn(c)}">${esc((o.service || o.name || '?')[0])}</span>`;
+}
+function seatBar(total, taken){ return `<div class="seats" role="img" aria-label="${taken} of ${total} seats taken">${Array.from({length:total}, (_, i) => `<i class="${i < taken ? '' : 'free'}"></i>`).join('')}</div>`; }
+const hostTag = l => `<span class="host">@${esc(l.host_username)}${l.host_verified ? ic('badge') + 'Verified host' : ''}</span>`;
+
+/* ---------- state ---------- */
+let S = {catalog:null, listings:[], me:null, subs:[], hosting:[], wallet:null, notes:[], tickets:null};
+const UI = {tab:'explore', cat:'All', q:'', sort:'popular', access:'ANY', verified:false, withSeats:true, maxPrice:0, subs:'active', hide:false};
+// The public link always opens on Explore. Only the "hide balance" choice is remembered on this device.
+try { UI.hide = !!JSON.parse(localStorage.getItem('subsplit-ui') || '{}').hide; } catch(e){}
+const saveUI = () => { try { localStorage.setItem('subsplit-ui', JSON.stringify({hide:UI.hide})); } catch(e){} };
+const money = k => UI.hide ? '₦••••' : naira(k);
+const settings = () => (S.catalog && S.catalog.settings) || {site_name:'SubSplit', categories:[]};
+const signedIn = () => !!S.me;
+const bal = () => (S.me && S.me.balances) || {};
+
+/* ---------- loading ---------- */
+async function loadAll(){
+  API.rpc('release_due_escrow').catch(() => {});
+  const pub = Promise.all([API.rpc('public_catalog'), API.rpc('explore_listings')]);
+  let mine = null;
+  if (API.user){
+    mine = Promise.all([API.rpc('my_overview'), API.rpc('my_subscriptions'), API.rpc('my_listings'), API.rpc('my_wallet'), API.rpc('my_notifications')])
+      .catch(async e => { if (e.status === 401 || e.status === 403) { API.forgetSession(); return null; } throw e; });
+  }
+  const [cat, list] = await pub;
+  S.catalog = cat; S.listings = list;
+  const m = mine ? await mine : null;
+  if (m){ [S.me, S.subs, S.hosting, S.wallet, S.notes] = m; }
+  else { S.me = null; S.subs = []; S.hosting = []; S.wallet = null; S.notes = []; }
+}
+async function refresh(){
+  try { await loadAll(); render(); }
+  catch(e){ app.innerHTML = `<div class="center-screen"><div class="empty" style="max-width:420px"><b>We couldn't load SubSplit</b><span>${esc(e.message)}</span><button class="btn primary" onclick="refresh()">Try again</button></div></div>`; }
+}
+
+/* ---------- top, nav ---------- */
+function topBar(){
+  const unread = S.me ? S.me.unread : 0;
+  const right = S.me
+    ? `<button class="icon-btn" data-act="notes" aria-label="Notifications">${ic('bell')}${unread ? `<span class="dotn">${unread > 9 ? '9+' : unread}</span>` : ''}</button>
+       <button class="icon-btn" data-act="help" aria-label="Help">${ic('help')}</button>`
+    : `<button class="icon-btn" data-act="help" aria-label="Help">${ic('help')}</button><button class="btn primary sm" data-act="auth">Sign in</button>`;
+  return `<header class="top"><div class="top-in">
+    <button class="logo" data-act="tab" data-v="explore" aria-label="${esc(settings().site_name)} home">${LOGO}<span class="wordmark">${wordmark(settings().site_name)}</span></button>
+    <div class="row" style="gap:8px">${right}</div></div></header>`;
+}
+function nav(){
+  const items = [['explore','Explore','compass'],['mysubs','My Subs','layers'],['wallet','Wallet','wallet'],['account','Account','user']];
+  return `<nav class="nav" aria-label="Main"><div class="nav-in">${items.map(([k, l, i]) => `<button data-act="tab" data-v="${k}" ${UI.tab === k ? 'aria-current="page"' : ''}>${ic(i)}<span>${l}</span></button>`).join('')}</div></nav>`;
+}
+function foot(){
+  const s = settings();
+  return `<div class="foot"><span>© ${new Date().getFullYear()} ${esc(s.site_name)}</span>${s.support_whatsapp ? `<span>WhatsApp support: <b>+${esc(s.support_whatsapp)}</b></span>` : ''}${s.support_email ? `<span>${esc(s.support_email)}</span>` : ''}</div>`;
+}
+
+/* ---------- Explore ---------- */
+function filtered(){
+  const q = UI.q.trim().toLowerCase();
+  let items = S.listings.filter(l =>
+    (UI.cat === 'All' || l.category === UI.cat) &&
+    (!q || `${l.service} ${l.plan} ${l.category} ${l.host_username}`.toLowerCase().includes(q)) &&
+    (UI.access === 'ANY' || (UI.access === 'INVITE' ? ['INVITE','FAMILY','TEAM'].includes(l.access_type) : l.access_type === UI.access)) &&
+    (!UI.verified || l.host_verified) && (!UI.withSeats || l.seats_available > 0) &&
+    (!UI.maxPrice || l.seat_kobo <= UI.maxPrice));
+  const by = {popular:(a, b) => b.members_total - a.members_total, newest:(a, b) => ts(b.created_at) - ts(a.created_at),
+    cheapest:(a, b) => a.seat_kobo - b.seat_kobo, seats:(a, b) => b.seats_available - a.seats_available};
+  return items.sort(by[UI.sort] || by.popular);
+}
+function card(l){
+  const left = l.seats_available, full = left <= 0;
+  return `<article class="card tap" data-act="open" data-id="${l.id}">
+    <div class="row">${tile(l)}<div class="grow"><h3>${esc(l.service)}</h3><p class="muted sm">${esc(l.plan)}</p></div>${l.savings_kobo > 0 ? `<span class="save">Save ${naira(l.savings_kobo)}</span>` : ''}</div>
+    <div class="price-row"><span class="price num">${naira(l.seat_kobo)}<small>${per(l.duration_days)}</small></span>${l.compare_kobo > l.seat_kobo ? `<s class="was num">${naira(l.compare_kobo)}${per(l.duration_days)}</s>` : ''}</div>
+    ${seatBar(l.seats_total, l.seats_occupied)}
+    <p class="sm ${left === 1 ? 'low' : ''}">${full ? 'Full' : `<b>${left} of ${l.seats_total}</b> seats available`}</p>
+    <div class="meta">${hostTag(l)}<span>${ACCESS[l.access_type].label}</span><span>${l.duration_days} days</span></div>
+    <button class="btn ${full ? '' : 'primary'} block" data-act="join" data-id="${l.id}" ${full ? 'disabled' : ''}>${full ? 'Full' : 'Join seat'}</button>
+  </article>`;
+}
+function feedHTML(items){
+  return items.length ? items.map(card).join('') : `<div class="empty"><b>No plans found</b><span>Try another search or category.</span></div>`;
+}
+function viewExplore(){
+  const s = settings(), items = filtered();
+  const cats = ['All', ...s.categories.filter(c => S.listings.some(l => l.category === c))];
+  const activeFilters = (UI.access !== 'ANY') + UI.verified + !UI.withSeats + !!UI.maxPrice + (UI.sort !== 'popular');
+  return `
+  <section class="hero">
+    <span class="eyebrow">${ic('users')} Shared access</span>
+    <h1>${esc(s.hero_title)}</h1>
+    <p>${esc(s.hero_text)}</p>
+    <div class="hero-actions"><button class="btn primary" data-act="toPlans">Find a seat</button><button class="btn soft" data-act="create">Share a subscription</button></div>
+  </section>
+  <div class="searchbar"><div class="search">${ic('search')}<input id="q" type="search" placeholder="Search Netflix, Spotify, data…" value="${esc(UI.q)}" aria-label="Search plans" autocomplete="off"></div>
+    <button class="icon-btn" data-act="filters" aria-label="Filters">${ic('filter')}${activeFilters ? `<span class="dotn" style="background:var(--brand)">${activeFilters}</span>` : ''}</button></div>
+  <div class="chips scroll">${cats.map(c => `<button class="chip" data-act="cat" data-v="${esc(c)}" aria-pressed="${UI.cat === c}">${esc(c)}</button>`).join('')}</div>
+  <div class="sec-head" id="plans"><h2>Available plans</h2><span class="muted sm" id="count">${items.length} plan${items.length === 1 ? '' : 's'}</span></div>
+  <div class="list" id="feed">${feedHTML(items)}</div>
+  <section class="card">
+    <h2 style="font-size:21px">How it works</h2>
+    <ol class="steps">
+      <li><b>Pick a seat</b><span>Choose the subscription you want and pay for your seat.</span></li>
+      <li><b>Get access</b><span>Your invitation or access details will appear in My Subs after your payment is confirmed.</span></li>
+      <li><b>Enjoy your subscription</b><span>Use your subscription throughout your active period. If something goes wrong, our support team is here to help.</span></li>
+    </ol>
+  </section>
+  ${foot()}`;
+}
+
+/* ---------- My Subs ---------- */
+function subCard(m){
+  const dl = daysLeft(m), total = Math.max(1, Math.round((ts(m.ends_at) - ts(m.starts_at)) / DAY)), pct = Math.min(100, Math.max(3, 100 - dl / total * 100));
+  const live = m.status === 'ACTIVE' || m.status === 'DISPUTED';
+  const pill = {ACTIVE: dl <= (settings().renewal_window_days || 7) ? `<span class="pill warn">Ends in ${dl} day${dl === 1 ? '' : 's'}</span>` : '<span class="pill good">Active</span>',
+    DISPUTED:'<span class="pill warn">We are helping</span>', COMPLETED:'<span class="pill neutral">Ended</span>', REFUNDED:'<span class="pill bad">Refunded</span>',
+    PARTIALLY_REFUNDED:'<span class="pill neutral">Part refunded</span>'}[m.status];
+  const access = !live ? '' : m.access_type === 'LOGIN' ? '' :
+    m.access_status === 'SENT' ? `<p class="sm" style="color:var(--good)">${ic('check')} Host sent your access to ${esc(m.contact)}</p>` :
+    `<p class="sm muted">${ic('clock')} Waiting for the host to send access to ${esc(m.contact)}</p>`;
+  const d = m.dispute;
+  return `<div class="card">
+    <div class="row">${tile(m)}<div class="grow"><h3>${esc(m.service)}</h3><p class="muted sm">${esc(m.plan)} · @${esc(m.host_username)}</p></div>${pill}</div>
+    <div class="dates"><div><span>Price</span><b class="num">${naira(m.amount_kobo)}</b></div><div><span>Started</span><b>${fmtShort(m.starts_at)}</b></div><div><span>Ends</span><b>${fmtShort(m.ends_at)}</b></div></div>
+    ${live ? `<div class="bar" aria-hidden="true"><i style="width:${pct}%"></i></div><p class="sm muted">${dl} day${dl === 1 ? '' : 's'} remaining${m.renewed ? ' · <b style="color:var(--good)">renewed</b>' : ''}</p>` : ''}
+    ${access}
+    ${d && (d.status === 'OPEN' || d.status === 'IN_REVIEW') ? `<p class="tip">We got your report and our team is on it. We'll send you a notification when it's sorted.</p>` : ''}
+    ${d && d.resolution ? `<p class="tip">Your report was resolved${d.resolution === 'REFUND' ? ' with a full refund' : d.resolution === 'PARTIAL_REFUND' ? ' with a partial refund' : ''}.</p>` : ''}
+    ${live ? `<div class="wrap-row">
+      <button class="btn soft sm" data-act="access" data-id="${m.listing_id}">${ic('lock')} Access</button>
+      ${m.can_renew ? `<button class="btn primary sm" data-act="renew" data-id="${m.id}" data-price="${m.renew_price_kobo}">Renew · ${naira(m.renew_price_kobo)}</button>` : ''}
+      ${m.status === 'ACTIVE' ? `<button class="btn line sm" data-act="report" data-id="${m.id}">Something not working?</button>` : ''}
+    </div>` : ''}
+  </div>`;
+}
+function hostCard(l){
+  const st = {DRAFT:'<span class="pill neutral">Draft</span>', PENDING_REVIEW:'<span class="pill warn">In review</span>', LIVE:'<span class="pill good">Live</span>',
+    PAUSED:'<span class="pill neutral">Paused</span>', REJECTED:'<span class="pill bad">Needs changes</span>', SUSPENDED:'<span class="pill bad">Suspended</span>', EXPIRED:'<span class="pill neutral">Expired</span>'}[l.status];
+  const waiting = l.members.filter(m => (m.status === 'ACTIVE' || m.status === 'DISPUTED') && m.access_status === 'WAITING').length;
+  const openReports = l.disputes.filter(d => d.status === 'OPEN' || d.status === 'IN_REVIEW').length;
+  return `<div class="card">
+    <div class="row">${tile(l)}<div class="grow"><h3>${esc(l.service)}</h3><p class="muted sm">${esc(l.plan)} · ${l.markup_pct}% markup</p></div>${st}</div>
+    <div class="price-row"><span class="price num">${naira(l.seat_kobo)}<small>/seat</small></span><span class="muted sm">you earn ${naira(l.host_kobo)} per seat</span></div>
+    ${seatBar(l.seats_offered, Math.min(l.seats_occupied, l.seats_offered))}
+    <p class="sm muted">${l.seats_occupied} of ${l.seats_offered} seats taken</p>
+    ${waiting ? `<p class="tip warn">${waiting} member${waiting > 1 ? 's are' : ' is'} waiting for access from you.</p>` : ''}
+    ${openReports ? `<p class="tip warn">A member reported a problem. Please reply.</p>` : ''}
+    ${l.status === 'REJECTED' && l.review_note ? `<p class="tip">SubSplit: ${esc(l.review_note)}</p>` : ''}
+    <div class="wrap-row"><button class="btn primary sm" data-act="manage" data-id="${l.id}">${ic('edit')} ${l.status === 'DRAFT' || l.status === 'REJECTED' ? 'Finish & submit' : 'Manage'}</button>${l.status === 'LIVE' ? `<button class="btn line sm" data-act="share" data-id="${l.id}">${ic('share')} Share link</button>` : ''}</div>
+  </div>`;
+}
+function signInPrompt(title, text){
+  return `<div class="empty" style="margin-top:12px"><b>${title}</b><span>${text}</span><button class="btn primary" data-act="auth">Sign in or create account</button></div>`;
+}
+function viewMySubs(){
+  if (!S.me) return `<div class="ptitle"><h1>My Subs</h1></div>${signInPrompt('Your subscriptions live here', 'Sign in to see the seats you joined and the plans you share.')}`;
+  const win = settings().renewal_window_days || 7;
+  const current = S.subs.filter(m => (m.status === 'ACTIVE' || m.status === 'DISPUTED') && ts(m.starts_at) <= Date.now());
+  const expiring = current.filter(m => m.status === 'ACTIVE' && daysLeft(m) <= win && !m.renewed);
+  const past = S.subs.filter(m => !(m.status === 'ACTIVE' || m.status === 'DISPUTED'));
+  const tabs = [['active','Active',current.length],['expiring','Expiring soon',expiring.length],['past','Past',past.length],['hosting','Shared by me',S.hosting.length]];
+  const list = {active:current, expiring, past}[UI.subs];
+  const body = UI.subs === 'hosting'
+    ? (S.hosting.length ? `<div class="list">${S.hosting.map(hostCard).join('')}</div>` : `<div class="empty"><b>Earn from your empty seats</b><span>Share a family or team plan you already pay for. SubSplit sets fair prices for you.</span><button class="btn soft sm" data-act="create">Share a subscription</button></div>`)
+    : (list.length ? `<div class="list">${list.map(subCard).join('')}</div>` : `<div class="empty"><b>${UI.subs === 'past' ? 'No past subscriptions' : UI.subs === 'expiring' ? 'Nothing ending soon' : "You haven't joined a plan yet"}</b>${UI.subs === 'active' ? `<button class="btn soft sm" data-act="tab" data-v="explore">Find a seat</button>` : ''}</div>`);
+  return `
+  <div class="ptitle"><h1>My Subs</h1><button class="btn primary sm" data-act="create">${ic('plus')} Share</button></div>
+  <div class="chips scroll">${tabs.map(([k, l, n]) => `<button class="chip" data-act="subs" data-v="${k}" aria-pressed="${UI.subs === k}">${l} <span class="n">${n}</span></button>`).join('')}</div>
+  ${body}`;
+}
+
+/* ---------- Wallet ---------- */
+const TX = {TOP_UP:'Added money', SUBSCRIPTION:'Seat payment', REFUND:'Refund', HOST_EARNING:'Earning available', EARNING_REVERSED:'Earning reversed',
+  WITHDRAWAL:'Withdrawal', WITHDRAWAL_REVERSED:'Withdrawal returned', TRANSFER_IN:'From earnings', TRANSFER_OUT:'Moved to wallet', ADJUSTMENT:'Adjustment'};
+function txRows(list){
+  if (!list.length) return `<div class="empty"><span>No transactions yet.</span></div>`;
+  return `<div class="rows-list">${list.map(t => `<div>
+    <span class="dot ${t.amount_kobo > 0 ? 'in' : 'out'}">${ic(t.amount_kobo > 0 ? 'down' : 'up')}</span>
+    <span class="grow"><b class="sm">${esc(TX[t.type] || t.type)}</b><br><span class="muted xs">${esc(t.description)} · ${fmtDT(t.created_at)}${t.account === 'EARNINGS' ? ' · earnings' : ''}</span></span>
+    <span class="amt num ${t.amount_kobo > 0 ? 'in' : ''}">${t.amount_kobo > 0 ? '+' : '−'}${naira(Math.abs(t.amount_kobo))}</span></div>`).join('')}</div>`;
+}
+function viewWallet(){
+  if (!S.me) return `<div class="ptitle"><h1>Wallet</h1></div>${signInPrompt('Your wallet', 'Sign in to add money and pay for seats.')}`;
+  const b = bal(), w = S.wallet;
+  const tx = w.transactions.filter(t => t.account !== 'PENDING');
+  const payPill = {SUCCESS:'<span class="pill good">Successful</span>', PENDING:'<span class="pill warn">Pending</span>', FAILED:'<span class="pill bad">Failed</span>', ABANDONED:'<span class="pill neutral">Cancelled</span>'};
+  const wPill = {PENDING:'<span class="pill warn">Requested</span>', APPROVED:'<span class="pill brand">Approved</span>', PAID:'<span class="pill good">Paid</span>', REJECTED:'<span class="pill bad">Returned</span>'};
+  const hosting = S.hosting.length || b.earnings_kobo || b.pending_kobo || b.total_earned_kobo;
+  return `
+  <div class="ptitle"><h1>Wallet</h1></div>
+  <div class="money">
+    <div class="lbl"><span>Wallet balance</span><button class="eye" data-act="hide" aria-label="${UI.hide ? 'Show' : 'Hide'} balance">${ic(UI.hide ? 'eyeoff' : 'eye')}</button></div>
+    <div class="big num">${money(b.wallet_kobo)}</div>
+    <div class="two"><button class="btn" data-act="fund">${ic('plus')} Add money</button><button class="btn ghost" data-act="withdraw">${ic('up')} Withdraw</button></div>
+  </div>
+  ${hosting ? `<div class="card">
+    <div class="row between"><h3>Host earnings</h3><button class="link" data-act="earnInfo">How it works</button></div>
+    <div class="quad">
+      <div><span>Available</span><b class="num">${money(b.earnings_kobo)}</b></div>
+      <div><span>Pending</span><b class="num">${money(b.pending_kobo)}</b></div>
+      <div><span>Withdrawn</span><b class="num">${money(b.withdrawn_kobo)}</b></div>
+      <div><span>Total earned</span><b class="num">${money(b.total_earned_kobo)}</b></div>
+    </div>
+    <div class="wrap-row"><button class="btn primary sm" data-act="withdraw" ${b.earnings_kobo > 0 ? '' : 'disabled'}>Withdraw to bank</button><button class="btn line sm" data-act="move" ${b.earnings_kobo > 0 ? '' : 'disabled'}>Move to wallet</button></div>
+  </div>` : ''}
+  ${w.withdrawals.length ? `<div class="sec-head"><h2>Withdrawals</h2></div><div class="rows-list">${w.withdrawals.map(x => `<div><span class="grow"><b class="sm">${naira(x.amount_kobo)} to ${esc(x.bank_name)}</b><br><span class="muted xs">${esc(x.account_number)} · ${fmtDT(x.created_at)}${x.status === 'REJECTED' && x.note ? ' · ' + esc(x.note) : ''}</span></span>${wPill[x.status]}</div>`).join('')}</div>` : ''}
+  <div class="sec-head"><h2>Transactions</h2></div>
+  ${txRows(tx)}
+  ${w.payments.length ? `<div class="sec-head"><h2>Card payments</h2></div><div class="rows-list">${w.payments.map(p => `<div><span class="grow"><b class="sm">${naira(p.amount_kobo)} · ${p.purpose === 'SEAT' ? 'Seat' : 'Add money'}</b><br><span class="muted xs">${esc(p.reference)} · ${fmtDT(p.created_at)}</span></span>${payPill[p.status]}</div>`).join('')}</div>` : ''}`;
+}
+
+/* ---------- Account ---------- */
+function viewAccount(){
+  const s = settings();
+  const faq = `
+  <details class="card"><summary>How your payment is protected</summary><p>Your payment is held safely by ${esc(s.site_name)} while you use your seat. If access stops working, tap “Something not working?” in My Subs. We'll look into it, and if the host can't fix it we refund you to your wallet.</p></details>
+  <details class="card"><summary>How seat prices are set</summary><p>${esc(s.site_name)} sets the normal price and the number of seats for every service. Hosts can only add a small markup inside our limits (10% to 30%). The seat price is the total divided by the seats, so everyone pays the same fair amount.</p></details>
+  <details class="card"><summary>Rules for hosts</summary><ul><li>Only share plans you own and pay for, using the sharing method the service allows.</li><li>Upload proof of your plan before it goes live.</li><li>Give members access quickly and keep the plan working for the whole period.</li><li>${esc(s.site_name)} keeps a ${(S.catalog.fee_bps || 1000) / 100}% fee from each seat. Your share becomes available when the member's period ends.</li></ul></details>`;
+  const support = `<div class="menu">
+    <button data-act="tickets">${ic('chat')}<span class="grow">Message support</span></button>
+    ${s.support_whatsapp ? `<button data-act="copy" data-v="+${esc(s.support_whatsapp)}">${ic('phone')}<span class="grow">WhatsApp +${esc(s.support_whatsapp)}</span>${ic('copy')}</button>` : ''}
+    ${s.support_email ? `<button data-act="copy" data-v="${esc(s.support_email)}">${ic('mail')}<span class="grow">${esc(s.support_email)}</span>${ic('copy')}</button>` : ''}
+  </div>`;
+  if (!S.me) return `<div class="ptitle"><h1>Account</h1></div>${signInPrompt('Welcome to ' + esc(s.site_name), 'Create a free account to join plans or share your own.')}<div class="sec-head"><h2>Help</h2></div>${faq}${foot()}`;
+  const p = S.me.profile;
+  return `
+  <div class="ptitle"><h1>Account</h1></div>
+  <div class="row"><span class="avatar">${esc(initials(p.full_name))}</span><div class="grow"><h3 style="font-size:19px">${esc(p.full_name || 'Your name')}</h3><p class="muted sm">@${esc(p.username)} · ${esc(p.email)}</p></div>${p.verified_host ? `<span class="pill brand">Verified host</span>` : ''}</div>
+  <div class="menu">
+    <button data-act="create">${ic('plus')}<span class="grow">Share a subscription</span></button>
+    <button data-act="hosting">${ic('layers')}<span class="grow">Plans I share</span><span class="muted sm">${S.hosting.length}</span></button>
+    <button data-act="notes">${ic('bell')}<span class="grow">Notifications</span>${S.me.unread ? `<span class="pill bad">${S.me.unread}</span>` : ''}</button>
+  </div>
+  <form class="card form" id="f-profile" novalidate>
+    <h3>Your details</h3>
+    <div class="field"><label for="p-name">Full name</label><input id="p-name" value="${esc(p.full_name)}" autocomplete="name"></div>
+    <div class="field"><label for="p-user">Username</label><input id="p-user" value="${esc(p.username)}" autocapitalize="none"><small>Hosts and members see this, not your email.</small></div>
+    <div class="field"><label for="p-phone">Phone number</label><input id="p-phone" inputmode="tel" value="${esc(p.phone)}" autocomplete="tel"></div>
+    <button class="btn primary" type="submit">Save details</button>
+  </form>
+  <div class="sec-head"><h2>Support</h2></div>${support}
+  <div class="sec-head"><h2>Help</h2></div>${faq}
+  <div class="menu"><button data-act="password">${ic('lock')}<span class="grow">Change password</span></button><button data-act="signout">${ic('out')}<span class="grow">Sign out</span></button></div>
+  ${foot()}`;
+}
+const VIEWS = {explore:viewExplore, mysubs:viewMySubs, wallet:viewWallet, account:viewAccount};
+
+/* =====================================================================
+   SHEETS
+   ===================================================================== */
+function openSheet(title, body){
+  $('#sheet-box').innerHTML = `<span class="grab"></span><div class="row between"><h2>${title}</h2><button class="x" data-act="close" aria-label="Close">${ic('x')}</button></div>${body}`;
+  $('#sheet').hidden = false; document.body.style.overflow = 'hidden'; $('#sheet-box').scrollTop = 0;
+}
+function closeSheet(){ $('#sheet').hidden = true; document.body.style.overflow = ''; }
+let toastT;
+function toast(msg){ const t = $('#toast'); t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => t.hidden = true, 4200); }
+function needAuth(){ if (!S.me){ authSheet(); return true; } return false; }
+
+async function detailSheet(id){
+  let l;
+  try { l = await API.rpc('listing_detail', {p_id:id}); } catch(e){ toast(e.message); return; }
+  const a = ACCESS[l.access_type], v = l.viewer || {};
+  const btn = v.is_host ? `<button class="btn soft block" data-act="manage" data-id="${l.id}">This is your plan · Manage</button>`
+    : v.is_member ? `<button class="btn soft block" data-act="access" data-id="${l.id}">You're in · See access</button>`
+    : l.seats_available <= 0 ? `<button class="btn block" disabled>This plan is full</button>`
+    : `<button class="btn primary block" data-act="join" data-id="${l.id}">Join seat · ${naira(l.seat_kobo)}</button>`;
+  openSheet('Plan details', `
+    <div class="row">${tile(l, true)}<div class="grow"><h3 style="font-size:20px">${esc(l.service)}</h3><p class="muted sm">${esc(l.plan)}</p></div>${l.savings_kobo > 0 ? `<span class="save">Save ${naira(l.savings_kobo)}</span>` : ''}</div>
+    <div class="price-row"><span class="price num" style="font-size:28px">${naira(l.seat_kobo)}<small>${per(l.duration_days)}</small></span>${l.compare_kobo > l.seat_kobo ? `<s class="was num">${naira(l.compare_kobo)}</s>` : ''}</div>
+    <div style="display:grid;gap:8px">${seatBar(l.seats_total, l.seats_occupied)}<p class="sm muted">${l.seats_total} total seats · ${l.seats_occupied} taken · <b class="${l.seats_available === 1 ? 'low' : ''}">${l.seats_available} available</b></p></div>
+    <div class="info">
+      <div>${ic(a.icon)}<span class="grow"><b>${a.label}</b><span>${a.how}</span></span></div>
+      <div>${ic('user')}<span class="grow"><b>Hosted by @${esc(l.host_username)}</b><span>${l.host_verified ? 'Verified host' : 'Host'}${l.host_name ? ' · ' + esc(l.host_name) : ''}</span></span></div>
+      <div>${ic('clock')}<span class="grow"><b>${l.duration_days} days</b><span>You can renew in My Subs near the end.</span></span></div>
+      ${l.note ? `<div>${ic('chat')}<span class="grow"><b>Note from the host</b><span>${esc(l.note)}</span></span></div>` : ''}
+      ${l.sharing_rules ? `<div>${ic('shield')}<span class="grow"><b>How ${esc(l.service)} sharing works</b><span>${esc(l.sharing_rules)}</span></span></div>` : ''}
+    </div>
+    ${S.me ? btn : `<button class="btn primary block" data-act="auth">Sign in to join</button>`}`);
+}
+
+async function confirmSheet(id){
+  if (needAuth()) return;
+  let l;
+  try { l = await API.rpc('listing_detail', {p_id:id}); } catch(e){ toast(e.message); return; }
+  const v = l.viewer || {}, a = ACCESS[l.access_type];
+  if (v.is_host){ toast('This is your own plan.'); return; }
+  if (v.is_member){ toast('You already have a seat in this plan.'); return; }
+  if (l.seats_available <= 0){ toast('Sorry, this plan is full.'); return; }
+  const enough = v.wallet_kobo >= l.seat_kobo;
+  const contact = needsContact(l.access_type)
+    ? `<div class="field"><label for="j-contact">${a.ask}</label><input id="j-contact" ${l.access_type === 'DATA' ? 'inputmode="tel" placeholder="0803 123 4567"' : 'type="email" inputmode="email" placeholder="you@gmail.com"'} value="${esc(l.access_type === 'DATA' ? S.me.profile.phone : S.me.profile.email)}"><small>Only the host sees this, to give you access.</small></div>` : '';
+  openSheet('Confirm your seat', `
+    <div class="kv">
+      <div><span>Service</span><b>${esc(l.service)} · ${esc(l.plan)}</b></div>
+      <div><span>Price</span><b class="num">${naira(l.seat_kobo)}${per(l.duration_days)}</b></div>
+      <div><span>Duration</span><b>${l.duration_days} days</b></div>
+      <div><span>Access</span><b>${a.label}</b></div>
+      <div><span>Host</span><b>@${esc(l.host_username)}${l.host_verified ? ' ✓' : ''}</b></div>
+      <div><span>Available seats</span><b>${l.seats_available}</b></div>
+      <div class="total"><span>Total</span><b class="num">${naira(l.seat_kobo)}</b></div>
+    </div>
+    ${contact}
+    ${enough
+      ? `<button class="btn primary block" data-act="payWallet" data-id="${l.id}">Confirm & Pay ${naira(l.seat_kobo)}</button><p class="muted xs" style="text-align:center">Paid from your wallet (${naira(v.wallet_kobo)})</p>`
+      : `<button class="btn primary block" data-act="payCard" data-id="${l.id}">Confirm & Pay ${naira(l.seat_kobo)}</button><p class="muted xs" style="text-align:center">You'll pay securely with Paystack: card, transfer or USSD.</p>`}
+    <p class="muted xs" style="text-align:center">By joining you agree to use only your own seat and follow the host's note.</p>`);
+}
+
+async function accessSheet(lid){
+  let a;
+  try { a = await API.rpc('get_access', {p_listing:lid}); } catch(e){ toast(e.message); return; }
+  const t = ACCESS[a.access_type];
+  const waiting = a.access_type !== 'LOGIN' && a.access_status !== 'SENT';
+  openSheet('Your access', `
+    ${a.access_type === 'LOGIN'
+      ? `<div class="secret" id="secret">${esc(a.details) || 'The host has not added the login yet. Please message support.'}</div>${a.details ? `<button class="btn soft" data-act="copy" data-v="${esc(a.details)}">${ic('copy')} Copy details</button>` : ''}`
+      : `<div class="info"><div>${ic(t.icon)}<span class="grow"><b>${waiting ? 'Waiting for the host' : 'Access sent'}</b><span>${waiting ? 'The host will send your ' + t.label.toLowerCase() + ' to ' : 'The host sent it to '}<b style="display:inline;color:var(--ink)">${esc(a.contact)}</b>.</span></span></div></div>
+         ${a.details ? `<div class="secret">${esc(a.details)}</div>` : ''}`}
+    ${a.customer_instructions ? `<p class="tip">${esc(a.customer_instructions)}</p>` : ''}
+    <button class="btn primary block" data-act="close">Got it</button>`);
+}
+
+function reportSheet(mid){
+  openSheet('Something not working?', `<form class="form" id="f-report" data-id="${mid}" novalidate>
+    <p class="muted">Tell us what happened and we'll help.</p>
+    <div class="field"><label for="r-reason">What's wrong?</label><select id="r-reason">
+      <option value="NOT_WORKING">The login or plan stopped working</option><option value="NO_ACCESS">I didn't get my invite or access</option>
+      <option value="WRONG_PLAN">It's not the plan I paid for</option><option value="REMOVED">I was removed from the plan</option><option value="OTHER">Something else</option></select></div>
+    <div class="field"><label for="r-text">Tell us more</label><textarea id="r-text" placeholder="e.g. The password was changed yesterday and I can't sign in."></textarea></div>
+    <button class="btn primary block" type="submit">Send to support</button></form>`);
+}
+
+/* ---------- host: share a subscription ---------- */
+const H = {service:null, plan:null, markup:null, seats:null};
+function createSheet(){
+  if (needAuth()) return;
+  const services = S.catalog.services;
+  if (!services.length){ toast('No services are open for sharing yet.'); return; }
+  H.service = H.service && services.find(s => s.id === H.service) ? H.service : null;
+  renderCreate();
+}
+function renderCreate(){
+  const services = S.catalog.services, fee = (S.catalog.fee_bps || 1000) / 100;
+  const s = services.find(x => x.id === H.service);
+  const p = s ? (s.plans.find(x => x.id === H.plan) || s.plans[0]) : null;
+  if (p && H.plan !== p.id){ H.plan = p.id; H.markup = p.max_markup_pct; H.seats = p.max_seats; }
+  let body = `<div class="stepno"><i>1</i> Choose the service</div>
+    <div class="svc-grid">${services.map(x => `<button type="button" data-act="hsvc" data-id="${x.id}" aria-pressed="${x.id === H.service}">${tile(x)}${esc(x.name)}</button>`).join('')}</div>`;
+  if (s && p){
+    const markups = []; for (let m = p.min_markup_pct; m <= p.max_markup_pct; m += 5) markups.push(m);
+    if (!markups.includes(p.max_markup_pct)) markups.push(p.max_markup_pct);
+    const locked = p.min_markup_pct === p.max_markup_pct;
+    const seat = seatPrice(p.normal_kobo, p.max_seats, H.markup), total = Math.round(p.normal_kobo * (100 + H.markup) / 100), feeK = Math.round(seat * fee / 100);
+    const a = ACCESS[p.access_type];
+    body += `
+    ${s.plans.length > 1 ? `<div class="field"><label for="h-plan">Plan</label><select id="h-plan">${s.plans.map(x => `<option value="${x.id}" ${x.id === p.id ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select></div>` : ''}
+    <div class="stepno"><i>2</i> SubSplit's rules for ${esc(s.name)} ${esc(p.name)}</div>
+    <div class="kv">
+      <div><span>Normal price</span><b class="num">${naira(p.normal_kobo)}</b></div>
+      <div><span>Seat limit</span><b>${p.max_seats} seats · set by SubSplit</b></div>
+      <div><span>Allowed markup</span><b>${locked ? p.min_markup_pct + '% (fixed)' : p.min_markup_pct + '% to ' + p.max_markup_pct + '%'}</b></div>
+      <div><span>Access</span><b>${a.label}</b></div>
+      <div><span>Period</span><b>${p.duration_days} days</b></div>
+    </div>
+    ${s.sharing_rules ? `<p class="tip">${esc(s.sharing_rules)}</p>` : ''}
+    <div class="stepno"><i>3</i> Your markup and seats</div>
+    ${locked ? `<p class="sm">Platform markup: <b>${p.min_markup_pct}%</b></p>` : `<div class="chips">${markups.map(m => `<button type="button" class="chip" data-act="hmark" data-v="${m}" aria-pressed="${m === H.markup}">${m}%</button>`).join('')}</div>`}
+    <div class="field"><label for="h-seats">Seats you will sell</label><select id="h-seats">${Array.from({length:p.max_seats}, (_, i) => i + 1).map(n => `<option ${n === H.seats ? 'selected' : ''}>${n}</option>`).join('')}</select><small>SubSplit allows up to ${p.max_seats}. The seat price stays the same whatever you choose.</small></div>
+    <div class="stepno"><i>4</i> What you earn</div>
+    <div class="kv">
+      <div><span>Normal price</span><b class="num">${naira(p.normal_kobo)}</b></div>
+      <div><span>Your markup ${H.markup}%</span><b class="num">${naira(total - p.normal_kobo)}</b></div>
+      <div><span>Total subscription value</span><b class="num">${naira(total)}</b></div>
+      <div><span>÷ ${p.max_seats} platform seats</span><b class="num">${naira(seat)} / seat</b></div>
+      <div><span>Platform fee ${fee}%</span><b class="num">−${naira(feeK)}</b></div>
+      <div class="total"><span>You earn per paid seat</span><b class="num">${naira(seat - feeK)}</b></div>
+      <div><span>If all ${H.seats} seats are paid</span><b class="num">${naira((seat - feeK) * H.seats)}</b></div>
+    </div>
+    <p class="muted xs">Final prices are calculated by SubSplit. Your share becomes available to withdraw when each member's ${p.duration_days}-day period ends.</p>
+    <form class="form" id="f-create" novalidate>
+      <div class="stepno"><i>5</i> Access and proof</div>
+      ${p.host_instructions ? `<p class="tip">${esc(p.host_instructions)}</p>` : ''}
+      <div class="field"><label for="h-access">${p.access_type === 'LOGIN' ? 'Login details for members' : 'Instructions for members (optional)'}</label>
+        <textarea id="h-access" placeholder="${p.access_type === 'LOGIN' ? 'Email: …\nPassword: …\nUse only the profile with your name.' : 'e.g. I send invites within 2 hours of payment.'}"></textarea>
+        <small>Only members who have paid can see this. Never shown on Explore.</small></div>
+      <div class="field"><label for="h-note">Note on your listing (optional)</label><input id="h-note" maxlength="300" placeholder="e.g. Please don't change the PIN"></div>
+      ${p.host_proof_required ? `<div class="field"><label for="h-proof">Proof you own this plan</label><input id="h-proof" type="file" accept="image/jpeg,image/png,image/webp,application/pdf"><small>A receipt or a screenshot of the subscription page. Max 5 MB. Only SubSplit sees it.</small></div>` : ''}
+      <div class="field"><label for="h-proofnote">Anything we should know? (optional)</label><input id="h-proofnote" maxlength="500" placeholder="e.g. Renews on the 5th every month"></div>
+      <label class="check"><input type="checkbox" id="h-own"> I own and pay for this plan, and I'll share it the way ${esc(s.name)} allows.</label>
+      <button class="btn primary block" type="submit">Submit for review</button>
+    </form>`;
+  }
+  openSheet('Share a subscription', `<p class="muted sm">SubSplit sets the normal price and seat limit. You choose your markup and we calculate a fair seat price.</p>${body}`);
+}
+
+async function manageSheet(id){
+  const l = S.hosting.find(x => x.id === id); if (!l) return;
+  const editable = !['SUSPENDED','EXPIRED'].includes(l.status);
+  const markups = []; for (let m = l.min_markup_pct; m <= l.max_markup_pct; m += 5) markups.push(m);
+  if (!markups.includes(l.max_markup_pct)) markups.push(l.max_markup_pct);
+  const live = l.members.filter(m => m.status === 'ACTIVE' || m.status === 'DISPUTED');
+  const needSubmit = l.status === 'DRAFT' || l.status === 'REJECTED';
+  openSheet('Manage plan', `
+    <div class="row">${tile(l, true)}<div class="grow"><h3 style="font-size:20px">${esc(l.service)}</h3><p class="muted sm">${esc(l.plan)} · ${l.seats_occupied} of ${l.seats_offered} seats taken</p></div></div>
+    ${needSubmit ? `<form class="form card" id="f-submit" data-id="${l.id}" novalidate style="box-shadow:none;background:var(--surface-2)">
+       <h3>${l.status === 'REJECTED' ? 'Fix and resubmit' : 'Finish your listing'}</h3>
+       ${l.review_note ? `<p class="tip warn">SubSplit: ${esc(l.review_note)}</p>` : ''}
+       ${l.host_proof_required ? `<div class="field"><label for="s-proof">Proof you own this plan</label><input id="s-proof" type="file" accept="image/jpeg,image/png,image/webp,application/pdf"><small>${l.proof_uploaded ? 'Proof already uploaded. Add a new file only to replace it.' : 'A receipt or screenshot. Max 5 MB.'}</small></div>` : ''}
+       <div class="field"><label for="s-note">Message to SubSplit (optional)</label><input id="s-note" value="${esc(l.proof_note)}"></div>
+       <button class="btn primary block" type="submit">Submit for review</button></form>` : ''}
+    ${l.status === 'PENDING_REVIEW' ? '<p class="tip">SubSplit is checking your listing. You will get a notification when it is live.</p>' : ''}
+    ${l.status === 'SUSPENDED' ? '<p class="tip warn">This listing is suspended. Please message support.</p>' : ''}
+    <div class="sec-head"><h2 style="font-size:18px">Members</h2></div>
+    ${live.length ? `<div class="rows-list">${live.map(m => `<div><span class="grow"><b class="sm">@${esc(m.buyer_username)}${m.buyer_name ? ' · ' + esc(m.buyer_name) : ''}</b>
+        ${m.contact ? `<br><span class="xs" style="color:var(--brand-strong);font-weight:700">${esc(m.contact)}</span>` : ''}
+        <br><span class="muted xs">Until ${fmtShort(m.ends_at)} · you earn ${naira(m.host_kobo)}</span></span>
+        ${l.access_type !== 'LOGIN' && m.access_status === 'WAITING' ? `<button class="btn primary sm" data-act="sent" data-id="${m.id}">Mark sent</button>` : m.status === 'DISPUTED' ? '<span class="pill warn">Reported</span>' : '<span class="pill good">OK</span>'}</div>`).join('')}</div>`
+      : '<p class="muted sm">No members yet.</p>'}
+    ${l.disputes.filter(d => d.status === 'OPEN' || d.status === 'IN_REVIEW').map(d => `<form class="form card" id="f-dreply" data-id="${d.id}" novalidate style="box-shadow:none;background:var(--warn-soft)">
+       <b>A member needs help</b><p class="sm">“${esc(d.details)}”</p>
+       <div class="field"><label for="dr-${d.id}">Your reply to SubSplit</label><textarea id="dr-${d.id}" name="reply">${esc(d.host_response)}</textarea></div>
+       <button class="btn primary sm" type="submit">Send reply</button></form>`).join('')}
+    ${editable ? `<form class="form" id="f-manage" data-id="${l.id}" novalidate>
+      <div class="sec-head"><h2 style="font-size:18px">Edit listing</h2></div>
+      <div class="kv"><div><span>Normal price</span><b class="num">${naira(l.normal_kobo)}</b></div><div><span>Seat limit</span><b>${l.max_seats} · set by SubSplit</b></div><div><span>Seat price now</span><b class="num">${naira(l.seat_kobo)}</b></div></div>
+      <div class="field"><span class="lbl2">Your markup</span><div class="chips">${markups.map(m => `<button type="button" class="chip" data-act="mmark" data-v="${m}" aria-pressed="${m === l.markup_pct}">${m}%</button>`).join('')}</div><input type="hidden" id="m-markup" value="${l.markup_pct}"></div>
+      <div class="field"><label for="m-seats">Seats you sell</label><select id="m-seats">${Array.from({length:l.max_seats}, (_, i) => i + 1).filter(n => n >= Math.max(1, l.seats_occupied)).map(n => `<option ${n === l.seats_offered ? 'selected' : ''}>${n}</option>`).join('')}</select></div>
+      <div class="field"><label for="m-access">${l.access_type === 'LOGIN' ? 'Login details' : 'Instructions for members'}</label><textarea id="m-access">${esc(l.access_details)}</textarea><small>Update this if you change the password. Only paying members see it.</small></div>
+      <div class="field"><label for="m-note">Note on your listing</label><input id="m-note" maxlength="300" value="${esc(l.note)}"></div>
+      <button class="btn primary block" type="submit">Save changes</button>
+      ${l.status === 'LIVE' ? `<button class="btn line block" type="button" data-act="pause" data-id="${l.id}" data-v="1">Pause listing</button>` : ''}
+      ${l.status === 'PAUSED' ? `<button class="btn soft block" type="button" data-act="pause" data-id="${l.id}" data-v="0">Resume listing</button>` : ''}
+    </form>` : ''}`);
+}
+
+function authSheet(mode = 'in'){
+  const up = mode === 'up';
+  openSheet(up ? 'Create your account' : 'Welcome back', `
+    <div class="tabs" role="tablist"><button role="tab" data-act="authmode" data-v="in" aria-selected="${!up}">Sign in</button><button role="tab" data-act="authmode" data-v="up" aria-selected="${up}">Create account</button></div>
+    <form class="form" id="${up ? 'f-signup' : 'f-signin'}" novalidate>
+      ${up ? `<div class="field"><label for="a-name">Full name</label><input id="a-name" autocomplete="name"></div>
+      <div class="field"><label for="a-phone">Phone number</label><input id="a-phone" inputmode="tel" autocomplete="tel" placeholder="0803 123 4567"></div>` : ''}
+      <div class="field"><label for="a-email">Email</label><input id="a-email" type="email" autocomplete="email" inputmode="email" autocapitalize="none"></div>
+      <div class="field"><label for="a-pass">Password</label><input id="a-pass" type="password" autocomplete="${up ? 'new-password' : 'current-password'}" placeholder="${up ? 'At least 8 characters' : ''}"></div>
+      <button class="btn primary block" type="submit">${up ? 'Create account' : 'Sign in'}</button>
+      ${up ? '' : '<button class="link" type="button" data-act="forgot">Forgot your password?</button>'}
+    </form>`);
+}
+function passwordSheet(title){
+  openSheet(title || 'Change password', `<form class="form" id="f-pass" novalidate><div class="field"><label for="np">New password</label><input id="np" type="password" autocomplete="new-password" placeholder="At least 8 characters"></div><button class="btn primary block" type="submit">Save password</button></form>`);
+}
+function fundSheet(preKobo){
+  if (needAuth()) return;
+  const s = settings();
+  openSheet('Add money', `<form class="form" id="f-fund" novalidate>
+    <div class="field"><label for="f-amt">Amount (₦)</label><input id="f-amt" inputmode="numeric" value="${preKobo ? Math.ceil(preKobo / 100) : 5000}"><small>Between ${naira(s.min_topup_kobo)} and ${naira(s.max_topup_kobo)}.</small></div>
+    <div class="chips">${[1000, 2000, 5000, 10000, 20000].map(a => `<button type="button" class="chip" data-act="famt" data-v="${a}">${naira(a * 100)}</button>`).join('')}</div>
+    <p class="tip">You'll pay securely on Paystack with card, bank transfer or USSD, then come back here.</p>
+    <button class="btn primary block" type="submit">Continue to Paystack</button></form>`);
+}
+function withdrawSheet(){
+  if (needAuth()) return;
+  const b = bal(), s = settings();
+  if (!(b.earnings_kobo > 0)){
+    openSheet('Withdraw', `<p class="muted">Only host earnings can be sent to a bank. Wallet money is for paying for seats.</p>${b.pending_kobo ? `<p class="tip">${naira(b.pending_kobo)} is pending and becomes available as members' periods end.</p>` : ''}<button class="btn primary block" data-act="create">Share a subscription</button>`);
+    return;
+  }
+  const banks = ['Access Bank','Ecobank','FCMB','Fidelity Bank','First Bank','GTBank','Kuda','Moniepoint','Opay','Palmpay','Polaris Bank','Stanbic IBTC','Sterling Bank','UBA','Union Bank','Wema Bank','Zenith Bank'];
+  openSheet('Withdraw earnings', `<form class="form" id="f-withdraw" novalidate>
+    <div class="kv"><div><span>Available</span><b class="num">${naira(b.earnings_kobo)}</b></div><div><span>Minimum withdrawal</span><b class="num">${naira(s.min_withdrawal_kobo)}</b></div></div>
+    <div class="field"><label for="w-amt">Amount (₦)</label><input id="w-amt" inputmode="decimal" value="${(b.earnings_kobo / 100).toFixed(b.earnings_kobo % 100 ? 2 : 0)}"></div>
+    <div class="field"><label for="w-bank">Bank</label><select id="w-bank">${banks.map(x => `<option>${x}</option>`).join('')}</select></div>
+    <div class="field"><label for="w-acct">Account number</label><input id="w-acct" inputmode="numeric" maxlength="10" placeholder="10 digits"></div>
+    <div class="field"><label for="w-name">Account name</label><input id="w-name" value="${esc(S.me.profile.full_name)}"></div>
+    <button class="btn primary block" type="submit">Request withdrawal</button></form>`);
+}
+function moveSheet(){
+  openSheet('Move to wallet', `<form class="form" id="f-move" novalidate><p class="muted sm">Use your available earnings to pay for seats.</p><div class="field"><label for="mv-amt">Amount (₦)</label><input id="mv-amt" inputmode="decimal" value="${(bal().earnings_kobo / 100).toFixed(bal().earnings_kobo % 100 ? 2 : 0)}"></div><button class="btn primary block" type="submit">Move to wallet</button></form>`);
+}
+async function notesSheet(){
+  const list = S.notes || [];
+  openSheet('Notifications', list.length ? `<div class="rows-list">${list.map(n => `<div style="align-items:flex-start"><span class="dot ${n.read ? 'out' : 'in'}">${ic('bell')}</span><span class="grow"><b class="sm">${esc(n.title)}</b>${n.body ? `<br><span class="sm muted">${esc(n.body)}</span>` : ''}<br><span class="xs muted">${fmtDT(n.created_at)}</span></span></div>`).join('')}</div>` : `<div class="empty"><span>No notifications yet.</span></div>`);
+  if (S.me && S.me.unread){ try { await API.rpc('mark_notifications_read'); S.me.unread = 0; S.notes.forEach(n => n.read = true); render(); } catch(e){} }
+}
+async function ticketsSheet(openId){
+  if (needAuth()) return;
+  try { S.tickets = await API.rpc('my_tickets'); } catch(e){ toast(e.message); return; }
+  const t = openId && S.tickets.find(x => x.id === openId);
+  if (t){
+    openSheet(esc(t.subject), `<div style="display:grid;gap:8px">${(t.messages || []).map(m => `<div class="msg ${m.from_admin ? 'them' : 'me'}">${m.from_admin ? '<b>SubSplit support</b>\n' : ''}${esc(m.body)}<br><span class="xs muted">${fmtDT(m.created_at)}</span></div>`).join('')}</div>
+      ${t.status === 'CLOSED' ? '<p class="tip">This conversation is closed. Start a new message if you need more help.</p>' : `<form class="form" id="f-treply" data-id="${t.id}" novalidate><div class="field"><label for="tr-body">Reply</label><textarea id="tr-body"></textarea></div><button class="btn primary block" type="submit">Send</button></form>`}
+      <button class="link" data-act="tickets">← All messages</button>`);
+    return;
+  }
+  const st = {OPEN:'<span class="pill warn">Waiting for us</span>', ANSWERED:'<span class="pill good">Replied</span>', CLOSED:'<span class="pill neutral">Closed</span>'};
+  openSheet('Support', `
+    <form class="form" id="f-ticket" novalidate><div class="field"><label for="tk-subj">Subject</label><input id="tk-subj" maxlength="120" placeholder="e.g. My invite didn't arrive"></div>
+    <div class="field"><label for="tk-body">Message</label><textarea id="tk-body"></textarea></div><button class="btn primary block" type="submit">Send message</button></form>
+    ${S.tickets.length ? `<div class="sec-head"><h2 style="font-size:18px">Your messages</h2></div><div class="rows-list">${S.tickets.map(x => `<div data-act="ticket" data-id="${x.id}" style="cursor:pointer"><span class="grow"><b class="sm">${esc(x.subject)}</b><br><span class="xs muted">${fmtDT(x.updated_at)}</span></span>${st[x.status]}</div>`).join('')}</div>` : ''}`);
+}
+function helpSheet(){
+  const s = settings();
+  openSheet('Help', `<div class="menu"><button data-act="tickets">${ic('chat')}<span class="grow">Message support</span></button>${s.support_whatsapp ? `<button data-act="copy" data-v="+${esc(s.support_whatsapp)}">${ic('phone')}<span class="grow">WhatsApp +${esc(s.support_whatsapp)}</span>${ic('copy')}</button>` : ''}</div>
+  <div class="info"><div>${ic('shield')}<span class="grow"><b>Your payment is protected</b><span>${esc(s.site_name)} holds your payment while you use your seat. If something goes wrong, tell us from My Subs and we'll help or refund you.</span></span></div>
+  <div>${ic('wallet')}<span class="grow"><b>Fair prices</b><span>${esc(s.site_name)} sets the normal price and seat limits. Hosts can only add 10% to 30%.</span></span></div>
+  <div>${ic('lock')}<span class="grow"><b>Private access</b><span>Logins and invites are only shown to members who have paid.</span></span></div></div>`);
+}
+function earnInfoSheet(){
+  openSheet('How host earnings work', `<div class="info">
+    <div>${ic('clock')}<span class="grow"><b>Pending</b><span>When a member pays, your share (seat price minus the ${(S.catalog.fee_bps || 1000) / 100}% fee) shows as pending.</span></span></div>
+    <div>${ic('check')}<span class="grow"><b>Available</b><span>When the member's period ends, it moves to Available. You can withdraw it or move it to your wallet.</span></span></div>
+    <div>${ic('shield')}<span class="grow"><b>If a member reports a problem</b><span>That seat's money waits until support sorts it out with you.</span></span></div></div>`);
+}
+function filtersSheet(){
+  openSheet('Filters', `<form class="form" id="f-filters" novalidate>
+    <div class="field"><label for="fl-sort">Sort by</label><select id="fl-sort">${[['popular','Most popular'],['newest','Newest'],['cheapest','Lowest price'],['seats','Most seats available']].map(([k, l]) => `<option value="${k}" ${UI.sort === k ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
+    <div class="field"><label for="fl-access">Access type</label><select id="fl-access">${[['ANY','Any'],['LOGIN','Shared login'],['INVITE','Invite / family / team'],['DATA','Data to your line'],['OTHER','Other']].map(([k, l]) => `<option value="${k}" ${UI.access === k ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
+    <div class="field"><label for="fl-max">Highest price per seat (₦)</label><input id="fl-max" inputmode="numeric" placeholder="Any" value="${UI.maxPrice ? UI.maxPrice / 100 : ''}"></div>
+    <label class="check"><input type="checkbox" id="fl-ver" ${UI.verified ? 'checked' : ''}> Verified hosts only</label>
+    <label class="check"><input type="checkbox" id="fl-seats" ${UI.withSeats ? 'checked' : ''}> Only plans with seats available</label>
+    <div class="wrap-row"><button class="btn line" type="button" data-act="clearFilters">Clear</button><button class="btn primary grow" type="submit">Show plans</button></div></form>`);
+}
+function resultSheet(ok, title, text, extra = ''){
+  openSheet(title, `<span class="ok-mark ${ok ? '' : 'bad'}">${ic(ok ? 'check' : 'x')}</span><p class="muted" style="text-align:center">${text}</p>${extra}<button class="btn primary block" data-act="close">OK</button>`);
+}
+
+/* =====================================================================
+   RENDER + ACTIONS
+   ===================================================================== */
+const app = $('#app');
+function render(){
+  if (!S.catalog) return;
+  const notice = settings().notice ? `<div class="notice">${esc(settings().notice)}</div>` : '';
+  app.innerHTML = topBar() + `<main class="shell">${notice}${VIEWS[UI.tab]()}</main>` + nav();
+  document.title = settings().site_name || 'SubSplit';
+  saveUI();
+}
+function go(tab){ UI.tab = tab; closeSheet(); render(); window.scrollTo(0, 0); }
+async function run(btn, fn, ok){
+  const old = btn ? btn.innerHTML : '';
+  if (btn){ btn.disabled = true; btn.textContent = 'Please wait…'; }
+  try { const r = await fn(); await loadAll(); render(); if (ok) toast(typeof ok === 'function' ? ok(r) : ok); return r == null ? true : r; }
+  catch(e){ toast(e.message || 'Something went wrong. Please try again.'); return false; }
+  finally { if (btn && btn.isConnected){ btn.disabled = false; btn.innerHTML = old; } }
+}
+async function copyText(t){
+  try { await navigator.clipboard.writeText(t); toast('Copied.'); }
+  catch(e){ const el = $('#secret'); if (el){ const r = document.createRange(); r.selectNodeContents(el); const s = getSelection(); s.removeAllRanges(); s.addRange(r); } toast('Press and hold to copy.'); }
+}
+async function shareLink(id){
+  const url = location.origin + location.pathname + '?plan=' + id;
+  if (navigator.share){ try { await navigator.share({title:settings().site_name, text:'Join my plan on ' + settings().site_name, url}); return; } catch(e){ if (e.name === 'AbortError') return; } }
+  copyText(url);
+}
+async function startPaystack(btn, body){
+  const old = btn.innerHTML; btn.disabled = true; btn.textContent = 'Opening Paystack…';
+  try { const r = await API.fn('payments-init', body); location.href = r.authorization_url; }
+  catch(e){ toast(e.message); btn.disabled = false; btn.innerHTML = old; }
+}
+
+document.addEventListener('click', async e => {
+  const el = e.target.closest('[data-act]');
+  if (!el){ if (e.target.id === 'sheet') closeSheet(); return; }
+  const a = el.dataset.act, id = el.dataset.id, v = el.dataset.v;
+  switch (a){
+    case 'tab': go(v); break;
+    case 'close': closeSheet(); break;
+    case 'cat': UI.cat = v; render(); break;
+    case 'toPlans': $('#plans').scrollIntoView({behavior:'smooth', block:'start'}); break;
+    case 'filters': filtersSheet(); break;
+    case 'clearFilters': Object.assign(UI, {sort:'popular', access:'ANY', verified:false, withSeats:true, maxPrice:0}); closeSheet(); render(); break;
+    case 'subs': UI.subs = v; render(); break;
+    case 'hosting': UI.subs = 'hosting'; go('mysubs'); break;
+    case 'hide': UI.hide = !UI.hide; render(); break;
+    case 'open': if (!e.target.closest('button')) detailSheet(id); break;
+    case 'join': confirmSheet(id); break;
+    case 'payWallet': {
+      const c = $('#j-contact');
+      const r = await run(el, () => API.rpc('join_with_wallet', {p_listing:id, p_contact:c ? c.value.trim() : ''}));
+      if (r){ const l = S.listings.find(x => x.id === id) || {}; await accessSheet(id); toast(`You joined ${l.service || 'the plan'}!`); }
+      break; }
+    case 'payCard': { const c = $('#j-contact'); startPaystack(el, {purpose:'SEAT', listing_id:id, contact:c ? c.value.trim() : ''}); break; }
+    case 'access': accessSheet(id); break;
+    case 'renew': {
+      const price = +el.dataset.price;
+      if (bal().wallet_kobo < price){ fundSheet(price - bal().wallet_kobo); toast(`Add ${naira(price - bal().wallet_kobo)} to renew.`); break; }
+      run(el, () => API.rpc('renew_membership', {p_id:id}), 'Renewed. Your next period starts when this one ends.'); break; }
+    case 'report': reportSheet(id); break;
+    case 'create': createSheet(); break;
+    case 'hsvc': H.service = id; H.plan = null; renderCreate(); break;
+    case 'hmark': H.markup = +v; renderCreate(); break;
+    case 'mmark': $('#m-markup').value = v; el.parentElement.querySelectorAll('.chip').forEach(c => c.setAttribute('aria-pressed', c === el)); break;
+    case 'manage': manageSheet(id); break;
+    case 'share': shareLink(id); break;
+    case 'sent': if (await run(el, () => API.rpc('host_mark_access_sent', {p_membership:id}), 'Marked as sent. The member was notified.')) manageSheet(S.hosting.find(l => l.members.some(m => m.id === id))?.id); break;
+    case 'pause': if (await run(el, () => API.rpc('host_set_paused', {p_listing:id, p_paused:v === '1'}), v === '1' ? 'Listing paused.' : 'Listing is live again.')) closeSheet(); break;
+    case 'auth': authSheet('in'); break;
+    case 'authmode': authSheet(v); break;
+    case 'forgot': { const em = $('#a-email').value.trim(); if (!em){ toast('Type your email above first.'); break; } run(el, () => API.resetPassword(em), 'Check your email for a link to reset your password.'); break; }
+    case 'password': passwordSheet(); break;
+    case 'signout': run(el, async () => { await API.signOut(); UI.tab = 'explore'; }, 'Signed out.'); break;
+    case 'fund': fundSheet(0); break;
+    case 'famt': $('#f-amt').value = v; break;
+    case 'withdraw': withdrawSheet(); break;
+    case 'move': moveSheet(); break;
+    case 'earnInfo': earnInfoSheet(); break;
+    case 'notes': notesSheet(); break;
+    case 'help': helpSheet(); break;
+    case 'tickets': ticketsSheet(); break;
+    case 'ticket': ticketsSheet(id); break;
+    case 'copy': copyText(v); break;
+  }
+});
+document.addEventListener('input', e => {
+  if (e.target.id === 'q'){ UI.q = e.target.value; const items = filtered(); $('#feed').innerHTML = feedHTML(items); $('#count').textContent = `${items.length} plan${items.length === 1 ? '' : 's'}`; }
+});
+document.addEventListener('change', e => {
+  if (e.target.id === 'h-plan'){ H.plan = e.target.value; const s = S.catalog.services.find(x => x.id === H.service), p = s.plans.find(x => x.id === H.plan); H.markup = p.max_markup_pct; H.seats = p.max_seats; renderCreate(); }
+  if (e.target.id === 'h-seats'){ H.seats = +e.target.value; const y = $('#sheet-box').scrollTop; renderCreate(); $('#sheet-box').scrollTop = y; }
+});
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#sheet').hidden) closeSheet(); });
+
+async function uploadProof(listingId, file){
+  if (!file) return '';
+  if (file.size > 5 * 1024 * 1024) throw new Error('The proof file is bigger than 5 MB. Please use a smaller screenshot.');
+  const ext = (file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 5) || 'jpg';
+  const path = `${API.user.id}/${listingId}/proof-${Date.now()}.${ext}`;
+  await API.upload('host-proofs', path, file);
+  return path;
+}
+
+document.addEventListener('submit', async e => {
+  e.preventDefault();
+  const f = e.target, btn = f.querySelector('[type=submit]'), val = id => ($('#' + id) || {}).value || '';
+  switch (f.id){
+    case 'f-signin': {
+      const em = val('a-email').trim(), pw = val('a-pass');
+      if (!em || !pw){ toast('Enter your email and password.'); break; }
+      if (await run(btn, () => API.signIn(em, pw), 'Welcome back!')) closeSheet(); break; }
+    case 'f-signup': {
+      const d = {full_name:val('a-name').trim(), phone:val('a-phone').trim(), email:val('a-email').trim(), password:val('a-pass')};
+      if (d.full_name.length < 2){ toast('Enter your full name.'); break; }
+      if (!/^\S+@\S+\.\S+$/.test(d.email)){ toast('Enter a real email address.'); break; }
+      if (d.password.length < 8){ toast('Use a password with at least 8 characters.'); break; }
+      const r = await run(btn, () => API.signUp(d));
+      if (r && r.confirm) resultSheet(true, 'Check your email', `We sent a link to <b>${esc(d.email)}</b>. Tap it to confirm your account.`);
+      else if (r){ closeSheet(); toast('Account created. Welcome!'); }
+      break; }
+    case 'f-pass': {
+      const pw = val('np'); if (pw.length < 8){ toast('Use at least 8 characters.'); break; }
+      if (await run(btn, () => API.updatePassword(pw), 'Password changed.')) closeSheet(); break; }
+    case 'f-profile': run(btn, () => API.rpc('update_my_profile', {p_full_name:val('p-name'), p_phone:val('p-phone'), p_username:val('p-user').trim().toLowerCase()}), 'Details saved.'); break;
+    case 'f-fund': startPaystack(btn, {purpose:'TOPUP', amount_kobo:toKobo(val('f-amt'))}); break;
+    case 'f-withdraw': {
+      const d = {p_amount_kobo:toKobo(val('w-amt')), p_bank:val('w-bank'), p_account_number:val('w-acct').replace(/\D/g, ''), p_account_name:val('w-name')};
+      if (await run(btn, () => API.rpc('request_withdrawal', d), 'Withdrawal requested. We will send it to your bank soon.')) closeSheet(); break; }
+    case 'f-move': if (await run(btn, () => API.rpc('move_earnings', {p_amount_kobo:toKobo(val('mv-amt'))}), 'Moved to your wallet.')) closeSheet(); break;
+    case 'f-report': if (await run(btn, () => API.rpc('open_dispute', {p_membership:f.dataset.id, p_reason:val('r-reason'), p_details:val('r-text')}), "Thanks. We're on it and will update you soon.")) closeSheet(); break;
+    case 'f-filters':
+      UI.sort = val('fl-sort'); UI.access = val('fl-access'); UI.maxPrice = toKobo(val('fl-max')); UI.verified = $('#fl-ver').checked; UI.withSeats = $('#fl-seats').checked;
+      closeSheet(); render(); break;
+    case 'f-create': {
+      if (!$('#h-own').checked){ toast('Tick the box to confirm you own this plan.'); break; }
+      const s = S.catalog.services.find(x => x.id === H.service), p = s.plans.find(x => x.id === H.plan);
+      const file = $('#h-proof') && $('#h-proof').files[0];
+      if (p.host_proof_required && !file){ toast('Add proof that you own this plan (receipt or screenshot).'); break; }
+      const r = await run(btn, async () => {
+        const c = await API.rpc('host_create_listing', {p_plan:p.id, p_markup_pct:H.markup, p_seats:H.seats, p_access:val('h-access'), p_note:val('h-note')});
+        const path = await uploadProof(c.listing_id, file);
+        return API.rpc('host_submit_listing', {p_listing:c.listing_id, p_proof_path:path, p_proof_note:val('h-proofnote')});
+      });
+      if (r){ closeSheet(); UI.subs = 'hosting'; go('mysubs'); toast(r.status === 'LIVE' ? 'Your listing is live!' : 'Sent for review. We will notify you when it is live.'); }
+      break; }
+    case 'f-submit': {
+      const file = $('#s-proof') && $('#s-proof').files[0];
+      const r = await run(btn, async () => {
+        const path = await uploadProof(f.dataset.id, file);
+        return API.rpc('host_submit_listing', {p_listing:f.dataset.id, p_proof_path:path, p_proof_note:val('s-note')});
+      });
+      if (r){ closeSheet(); toast(r.status === 'LIVE' ? 'Your listing is live!' : 'Sent for review.'); }
+      break; }
+    case 'f-manage':
+      if (await run(btn, () => API.rpc('host_update_listing', {p_listing:f.dataset.id, p_markup_pct:+val('m-markup'), p_seats:+val('m-seats'), p_access:val('m-access'), p_note:val('m-note')}), 'Listing updated.')) closeSheet();
+      break;
+    case 'f-dreply': if (await run(btn, () => API.rpc('host_respond_dispute', {p_dispute:f.dataset.id, p_text:f.querySelector('textarea').value}), 'Reply sent to support.')) closeSheet(); break;
+    case 'f-ticket': if (await run(btn, () => API.rpc('create_ticket', {p_subject:val('tk-subj'), p_body:val('tk-body')}), 'Message sent. We will reply soon.')) ticketsSheet(); break;
+    case 'f-treply': { const tid = f.dataset.id; if (await run(btn, () => API.rpc('reply_ticket', {p_ticket:tid, p_body:val('tr-body')}), 'Sent.')) ticketsSheet(tid); break; }
+  }
+});
+
+/* After Paystack sends the customer back: ?reference=... -> ask the server to verify. */
+async function handlePaymentReturn(){
+  const q = new URLSearchParams(location.search), ref = q.get('reference') || q.get('trxref');
+  if (!ref) return;
+  history.replaceState(null, '', location.pathname);
+  openSheet('Confirming payment', `<p class="muted" style="text-align:center">Checking with Paystack. Please wait…</p>`);
+  let r;
+  try { r = await API.fn('payments-verify', {reference:ref}); } catch(e){ r = {status:'ERROR', message:e.message}; }
+  await loadAll(); render();
+  if (r.status === 'SUCCESS'){
+    if (r.purpose === 'SEAT' && r.joined){ UI.tab = 'mysubs'; UI.subs = 'active'; render(); resultSheet(true, "You're in!", `Payment of ${naira(r.amount_kobo)} confirmed and your seat is reserved. Your access is in My Subs.`); }
+    else if (r.purpose === 'SEAT'){ resultSheet(false, 'Seat not reserved', `${esc(r.message || 'The seat was taken before your payment finished.')} Your ${naira(r.amount_kobo)} is safe in your wallet.`); }
+    else { UI.tab = 'wallet'; render(); resultSheet(true, 'Money added', `${naira(r.amount_kobo)} was added to your wallet.`); }
+  } else if (r.status === 'PENDING'){
+    resultSheet(true, 'Payment processing', 'Your bank is still confirming the payment. It will show in your wallet automatically once confirmed.');
+  } else {
+    resultSheet(false, r.status === 'CANCELLED' ? 'Payment cancelled' : 'Payment not completed', esc(r.message || 'No money was taken.'));
+  }
+}
+
+(async function start(){
+  if (!API.configured){
+    app.innerHTML = `<div class="center-screen"><div class="empty" style="max-width:440px"><b>SubSplit is not connected yet</b><span>Open <b>config.js</b> and add your Supabase URL and publishable key. See the setup guide.</span></div></div>`;
+    return;
+  }
+  const back = API.consumeAuthRedirect();
+  await refresh();
+  if (back && back.error) toast(back.error);
+  else if (back && back.type === 'recovery') passwordSheet('Set a new password');
+  else if (back && back.type === 'signup') toast('Email confirmed. Welcome to SubSplit!');
+  await handlePaymentReturn();
+  const plan = new URLSearchParams(location.search).get('plan');
+  if (plan){ history.replaceState(null, '', location.pathname); UI.tab = 'explore'; render(); detailSheet(plan); }
+})();
+</script>
+</body>
+</html>

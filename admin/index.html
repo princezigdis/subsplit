@@ -1,0 +1,607 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>SubSplit Admin</title>
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#17172B">
+<link rel="icon" href="../logo-mark.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700;12..96,800&family=Figtree:wght@400;500;600;700&display=swap">
+<!--
+  SUBSPLIT · ADMIN DASHBOARD (separate app, deployed at /admin/)
+  This page holds NO data and NO secrets. After sign-in it asks the database
+  "is this user an admin?" (admin_me). Every admin function in the database
+  checks again and returns 403 to anyone who is not in public.admin_users.
+  Hiding this page is NOT the security: the database is.
+-->
+<style>
+:root{
+  --bg:#F4F4F9; --surface:#FFFFFF; --surface-2:#EFEFF6; --ink:#17172B; --muted:#6B6B85; --line:#E3E3EE;
+  --brand:#5B5BD6; --brand-ink:#FFFFFF; --brand-soft:#ECECFD; --brand-strong:#3F3FB0;
+  --side:#17172B; --side-ink:#D9D9EA; --side-active:#2A2A48;
+  --good:#14905F; --good-soft:#E1F5EC; --warn:#A15C00; --warn-soft:#FFF1D9; --bad:#C93A3A; --bad-soft:#FDE7E7;
+  --scrim:rgba(23,23,43,.45); --shadow:0 1px 2px rgba(23,23,43,.05),0 6px 18px rgba(23,23,43,.05);
+  --f-display:'Bricolage Grotesque','Segoe UI',system-ui,sans-serif; --f-body:'Figtree',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0F0F1A; --surface:#181826; --surface-2:#212134; --ink:#ECECF6; --muted:#9C9CB8; --line:#2B2B42;
+  --brand:#8B8BFF; --brand-ink:#0F0F1A; --brand-soft:#252550; --brand-strong:#BDBDFF;
+  --side:#0B0B14; --side-ink:#C9C9DE; --side-active:#22223A;
+  --good:#5AD39B; --good-soft:#15352A; --warn:#F5BC5B; --warn-soft:#3A2C12; --bad:#FF8A8A; --bad-soft:#3E1C1F;
+  --scrim:rgba(0,0,0,.6); --shadow:0 1px 2px rgba(0,0,0,.3); color-scheme:dark;
+}}
+:root[data-theme="dark"]{
+  --bg:#0F0F1A; --surface:#181826; --surface-2:#212134; --ink:#ECECF6; --muted:#9C9CB8; --line:#2B2B42;
+  --brand:#8B8BFF; --brand-ink:#0F0F1A; --brand-soft:#252550; --brand-strong:#BDBDFF;
+  --side:#0B0B14; --side-ink:#C9C9DE; --side-active:#22223A;
+  --good:#5AD39B; --good-soft:#15352A; --warn:#F5BC5B; --warn-soft:#3A2C12; --bad:#FF8A8A; --bad-soft:#3E1C1F;
+  --scrim:rgba(0,0,0,.6); --shadow:0 1px 2px rgba(0,0,0,.3); color-scheme:dark;
+}
+*{box-sizing:border-box} [hidden]{display:none!important}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 var(--f-body);-webkit-font-smoothing:antialiased}
+button{font:inherit;color:inherit} h1,h2,h3{font-family:var(--f-display);margin:0;letter-spacing:-.01em;text-wrap:balance} p{margin:0}
+:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
+.ic{width:18px;height:18px;flex:none}
+.muted{color:var(--muted)} .sm{font-size:13.5px} .xs{font-size:12px} .num{font-variant-numeric:tabular-nums}
+.row{display:flex;align-items:center;gap:10px} .between{justify-content:space-between} .grow{flex:1;min-width:0} .wrap-row{display:flex;flex-wrap:wrap;gap:8px}
+
+/* layout: sidebar on desktop, scrolling tab bar on phones */
+.layout{display:grid;grid-template-columns:232px 1fr;min-height:100vh}
+.side{background:var(--side);color:var(--side-ink);padding:18px 12px;position:sticky;top:0;height:100vh;overflow:auto;display:flex;flex-direction:column;gap:4px}
+.brandline{display:flex;align-items:center;gap:10px;padding:4px 8px 16px;font:800 19px var(--f-display);color:#fff}
+.brandline svg{width:30px;height:30px}
+.brandline span small{display:block;font:600 11px var(--f-body);letter-spacing:.08em;text-transform:uppercase;color:var(--side-ink);opacity:.7}
+.side button.nav{display:flex;align-items:center;gap:10px;width:100%;background:none;border:0;color:var(--side-ink);padding:9px 10px;border-radius:10px;cursor:pointer;font-weight:600;font-size:14px;text-align:left}
+.side button.nav[aria-current="page"]{background:var(--side-active);color:#fff}
+.side .badge{margin-left:auto}
+.side .who{margin-top:auto;padding:12px 8px 0;border-top:1px solid rgba(255,255,255,.08);font-size:13px;display:grid;gap:8px}
+.main{min-width:0;padding:24px;display:grid;gap:18px;align-content:start;max-width:1100px}
+.topnav{display:none}
+@media (max-width:900px){
+  .layout{grid-template-columns:1fr}
+  .side{display:none}
+  .topnav{display:block;position:sticky;top:env(safe-area-inset-top,0px);z-index:20;background:var(--side);color:var(--side-ink)}
+  .topnav .bar1{display:flex;align-items:center;justify-content:space-between;padding:10px 16px}
+  .topnav .tabs-x{display:flex;gap:4px;overflow-x:auto;padding:0 12px 10px;scrollbar-width:none}
+  .topnav .tabs-x::-webkit-scrollbar{display:none}
+  .topnav button.nav{background:none;border:0;color:var(--side-ink);padding:7px 12px;border-radius:999px;white-space:nowrap;font-weight:600;font-size:13.5px;cursor:pointer;display:inline-flex;gap:6px;align-items:center}
+  .topnav button.nav[aria-current="page"]{background:var(--side-active);color:#fff}
+  .main{padding:16px}
+}
+.ptitle{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.ptitle h1{font-size:26px}
+.badge{background:#FFB547;color:#3A2400;border-radius:99px;font-size:11px;font-weight:800;padding:1px 7px}
+
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;border:1px solid transparent;background:var(--surface-2);color:var(--ink);padding:9px 14px;border-radius:10px;font-weight:700;font-size:14px;cursor:pointer;min-height:40px;text-decoration:none}
+.btn.primary{background:var(--brand);color:var(--brand-ink)} .btn.soft{background:var(--brand-soft);color:var(--brand-strong)}
+.btn.line{background:transparent;border-color:var(--line)} .btn.danger{background:var(--bad-soft);color:var(--bad)} .btn.good{background:var(--good-soft);color:var(--good)}
+.btn.sm{min-height:34px;padding:6px 11px;font-size:13px} .btn.block{width:100%} .btn:disabled{opacity:.5;cursor:not-allowed}
+.btn[data-armed]{background:var(--bad);color:#fff}
+.link{background:none;border:0;padding:0;color:var(--brand-strong);font-weight:700;cursor:pointer}
+
+.card{background:var(--surface);border-radius:16px;padding:16px;box-shadow:var(--shadow);display:grid;gap:10px;min-width:0}
+.card h3{font-size:16px}
+.card.tap{cursor:pointer}
+.grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(300px,1fr))}
+.stats{display:grid;gap:10px;grid-template-columns:repeat(auto-fill,minmax(170px,1fr))}
+.stat{background:var(--surface);border-radius:14px;padding:14px;box-shadow:var(--shadow);display:grid;gap:2px}
+.stat span{font-size:12px;color:var(--muted);font-weight:600}
+.stat b{font:800 21px var(--f-display)}
+.stat.alert b{color:var(--warn)}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:999px;padding:6px 12px;font-weight:600;font-size:13px;cursor:pointer;white-space:nowrap}
+.chip[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.pill{display:inline-flex;align-items:center;padding:2px 9px;border-radius:999px;font-size:11.5px;font-weight:700;white-space:nowrap}
+.pill.good{background:var(--good-soft);color:var(--good)} .pill.warn{background:var(--warn-soft);color:var(--warn)} .pill.bad{background:var(--bad-soft);color:var(--bad)}
+.pill.neutral{background:var(--surface-2);color:var(--muted)} .pill.brand{background:var(--brand-soft);color:var(--brand-strong)}
+.tile{width:38px;height:38px;border-radius:11px;display:grid;place-items:center;font:800 16px var(--f-display);flex:none;overflow:hidden}
+.tile img{width:100%;height:100%;object-fit:cover}
+.rows{background:var(--surface);border-radius:16px;box-shadow:var(--shadow);overflow:hidden}
+.rows>div{display:flex;align-items:center;gap:12px;padding:12px 14px;border-bottom:1px solid var(--line)}
+.rows>div:last-child{border-bottom:0}
+.rows>div.tap{cursor:pointer} .rows>div.tap:hover{background:var(--surface-2)}
+.amt{font-weight:800;white-space:nowrap;text-align:right} .amt.in{color:var(--good)} .amt.out{color:var(--ink)}
+.kv{display:grid;border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.kv>div{display:flex;justify-content:space-between;gap:12px;padding:8px 12px;border-bottom:1px solid var(--line);font-size:14px}
+.kv>div:last-child{border-bottom:0} .kv span{color:var(--muted)} .kv b{text-align:right;overflow-wrap:anywhere}
+.tip{background:var(--surface-2);border-radius:10px;padding:10px 12px;font-size:13.5px;color:var(--muted)}
+.tip.warn{background:var(--warn-soft);color:var(--warn)} .tip.bad{background:var(--bad-soft);color:var(--bad)} .tip.good{background:var(--good-soft);color:var(--good)}
+.secret{white-space:pre-wrap;background:var(--surface-2);border-radius:10px;padding:10px 12px;font-size:14px;overflow-wrap:anywhere}
+.form{display:grid;gap:12px}
+.field{display:grid;gap:5px;min-width:0}
+.field label{font-size:13px;font-weight:700} .field small{color:var(--muted);font-size:12px}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+@media (max-width:520px){.two{grid-template-columns:1fr}}
+input,select,textarea{font:inherit;font-size:16px;color:var(--ink);background:var(--surface-2);border:1.5px solid transparent;border-radius:10px;padding:9px 12px;width:100%}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--brand);background:var(--surface)}
+input[type=color]{padding:3px;height:42px}
+textarea{min-height:80px;resize:vertical}
+.check{display:flex;gap:8px;align-items:flex-start;font-size:14px;cursor:pointer}
+.check input{width:18px;height:18px;margin:2px 0 0;flex:none;accent-color:var(--brand)}
+.search{display:flex;gap:8px}
+.search input{max-width:360px}
+.msg{padding:8px 12px;border-radius:12px;max-width:85%;font-size:14px;white-space:pre-wrap}
+.msg.admin{background:var(--brand-soft);justify-self:end} .msg.user{background:var(--surface-2)}
+.diff{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;background:var(--surface-2);border-radius:8px;padding:8px;overflow-x:auto;white-space:pre}
+
+.sheet-wrap{position:fixed;inset:0;z-index:60;background:var(--scrim);display:flex;justify-content:flex-end}
+.sheet{background:var(--bg);width:100%;max-width:560px;height:100%;overflow:auto;padding:18px 18px calc(24px + env(safe-area-inset-bottom,0px));display:grid;gap:14px;align-content:start;box-shadow:-10px 0 40px rgba(0,0,0,.15)}
+.sheet h2{font-size:21px}
+.x{background:var(--surface-2);border:0;width:34px;height:34px;border-radius:50%;display:grid;place-items:center;cursor:pointer;color:var(--muted);flex:none}
+#toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom,0px));z-index:80;background:var(--ink);color:var(--bg);padding:11px 16px;border-radius:12px;font-weight:600;font-size:14px;max-width:calc(100% - 32px)}
+.center{min-height:100vh;display:grid;place-items:center;padding:16px}
+.login{width:100%;max-width:380px;background:var(--surface);border-radius:20px;padding:24px;box-shadow:var(--shadow);display:grid;gap:14px}
+.empty{padding:28px;text-align:center;color:var(--muted);border:1.5px dashed var(--line);border-radius:16px}
+</style>
+</head>
+<body>
+<div id="app"><div class="center muted">Loading…</div></div>
+<div id="sheet" class="sheet-wrap" hidden><div class="sheet" id="sheet-box" role="dialog" aria-modal="true"></div></div>
+<div id="toast" role="status" hidden></div>
+<script src="../config.js"></script>
+<script src="../api.js"></script>
+<script>
+/* =====================================================================
+   SubSplit Admin
+   ===================================================================== */
+const $ = (s, r = document) => r.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const naira = k => { k = Number(k) || 0; const f = k % 100 !== 0; return '₦' + (k / 100).toLocaleString('en-NG', {minimumFractionDigits: f ? 2 : 0, maximumFractionDigits: 2}); };
+const toKobo = v => Math.round((parseFloat(String(v).replace(/[,₦\s]/g, '')) || 0) * 100);
+const nairaInput = k => k == null ? '' : (k / 100).toFixed(k % 100 ? 2 : 0);
+const fmtDT = t => t ? new Date(t).toLocaleString('en-GB', {day:'numeric', month:'short', year:'numeric', hour:'numeric', minute:'2-digit'}) : '—';
+const fmtD = t => t ? new Date(t).toLocaleDateString('en-GB', {day:'numeric', month:'short', year:'numeric'}) : '—';
+function textOn(hex){ const h = (hex || '#5B5BD6').replace('#', ''); const [r, g, b] = [0, 2, 4].map(i => parseInt(h.substr(i, 2), 16) / 255); return (0.2126*r + 0.7152*g + 0.0722*b) > 0.62 ? '#1A1A1A' : '#FFFFFF'; }
+const tile = o => o.logo_url ? `<span class="tile" style="background:${esc(o.logo_color)}"><img src="${esc(o.logo_url)}" alt=""></span>` : `<span class="tile" style="background:${esc(o.logo_color || '#5B5BD6')};color:${textOn(o.logo_color)}">${esc((o.service || o.name || '?')[0])}</span>`;
+const seatPrice = (normal, seats, markup) => Math.round(normal * (100 + markup) / 100 / seats / 100) * 100;
+const ACCESS = {LOGIN:'Shared login', INVITE:'Invite', FAMILY:'Family invite', TEAM:'Team invite', DATA:'Data to member\'s line', OTHER:'Other'};
+const ICONS = {
+  home:'<path d="M3 11 12 4l9 7"/><path d="M5 10v10h14V10"/>', users:'<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.6a3.5 3.5 0 0 1 0 6.8M18 14a6.5 6.5 0 0 1 3.5 6"/>',
+  grid:'<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
+  list:'<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>', seat:'<path d="M6 10V6a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v4"/><path d="M4 10h16v6H4zM6 16v4M18 16v4"/>',
+  card:'<rect x="2.5" y="5" width="19" height="14" rx="2.5"/><path d="M2.5 10h19"/>', book:'<path d="M4 4h11a3 3 0 0 1 3 3v13H7a3 3 0 0 1-3-3z"/><path d="M4 17a3 3 0 0 1 3-3h11"/>',
+  bank:'<path d="M3 10 12 4l9 6"/><path d="M5 10v8M9.5 10v8M14.5 10v8M19 10v8M3 20h18"/>', flag:'<path d="M5 21V4M5 4h11l-2 4 2 4H5"/>',
+  chat:'<path d="M4 19.5 5.3 16A8 8 0 1 1 8 18.7z"/>', cog:'<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',
+  log:'<path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M8 13h8M8 17h5"/>',
+  x:'<path d="M6 6l12 12M18 6 6 18"/>', copy:'<rect x="8" y="8" width="12" height="12" rx="2.5"/><path d="M16 8V6.5A2.5 2.5 0 0 0 13.5 4h-7A2.5 2.5 0 0 0 4 6.5v7A2.5 2.5 0 0 0 6.5 16H8"/>',
+  out:'<path d="M15 4h3.5A1.5 1.5 0 0 1 20 5.5v13a1.5 1.5 0 0 1-1.5 1.5H15"/><path d="M10 8l-4 4 4 4M6 12h10"/>', plus:'<path d="M12 5v14M5 12h14"/>'
+};
+const ic = n => `<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[n] || ''}</svg>`;
+const LOGO = `<svg viewBox="0 0 40 40" aria-hidden="true"><rect width="40" height="40" rx="12" fill="#5B5BD6"/><path d="M19 10a10 10 0 0 0 0 20z" fill="#fff"/><path d="M22 13a10 10 0 0 1 0 20z" fill="#FFB547"/></svg>`;
+const P = (cls, t) => `<span class="pill ${cls}">${esc(t)}</span>`;
+const LST = {DRAFT:['neutral','Draft'], PENDING_REVIEW:['warn','Needs review'], LIVE:['good','Live'], PAUSED:['neutral','Paused'], REJECTED:['bad','Rejected'], SUSPENDED:['bad','Suspended'], EXPIRED:['neutral','Expired']};
+const MST = {ACTIVE:['good','Active'], DISPUTED:['warn','Disputed'], COMPLETED:['neutral','Completed'], REFUNDED:['bad','Refunded'], PARTIALLY_REFUNDED:['neutral','Part refunded']};
+const PST = {PENDING:['warn','Pending'], SUCCESS:['good','Success'], FAILED:['bad','Failed'], ABANDONED:['neutral','Cancelled']};
+const WST = {PENDING:['warn','Requested'], APPROVED:['brand','Approved'], PAID:['good','Paid'], REJECTED:['bad','Rejected']};
+const DST = {OPEN:['warn','Open'], IN_REVIEW:['brand','In review'], RESOLVED:['good','Resolved'], CLOSED:['neutral','Closed']};
+const TST = {OPEN:['warn','Waiting for us'], ANSWERED:['good','Answered'], CLOSED:['neutral','Closed']};
+const pill = (map, k) => P(...(map[k] || ['neutral', k]));
+
+const PAGES = [['dashboard','Dashboard','home'],['users','Users','users'],['services','Services','grid'],['listings','Listings','list'],['memberships','Memberships','seat'],
+  ['payments','Payments','card'],['wallet','Wallet ledger','book'],['withdrawals','Withdrawals','bank'],['disputes','Disputes','flag'],['support','Support','chat'],['settings','Settings','cog'],['audit','Audit logs','log']];
+let ME = null, DASH = null, SETTINGS = null, page = 'dashboard', filter = {}, cache = {};
+try { page = PAGES.some(p => p[0] === sessionStorage.getItem('admin-page')) ? sessionStorage.getItem('admin-page') : 'dashboard'; } catch(e){}
+const app = $('#app');
+let toastT;
+function toast(m){ const t = $('#toast'); t.textContent = m; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => t.hidden = true, 4200); }
+function openSheet(title, body){ $('#sheet-box').innerHTML = `<div class="row between"><h2>${title}</h2><button class="x" data-act="close" aria-label="Close">${ic('x')}</button></div>${body}`; $('#sheet').hidden = false; $('#sheet-box').scrollTop = 0; }
+function closeSheet(){ $('#sheet').hidden = true; }
+async function copyText(t){ try { await navigator.clipboard.writeText(t); toast('Copied.'); } catch(e){ toast(t); } }
+
+/* ---------- sign-in + admin check ---------- */
+function loginScreen(msg){
+  app.innerHTML = `<div class="center"><form class="login" id="f-login" novalidate>
+    <div class="row">${LOGO.replace('<svg', '<svg style="width:36px;height:36px"')}<div><h2>SubSplit Admin</h2><p class="muted sm">Admins only</p></div></div>
+    ${msg ? `<p class="tip bad">${esc(msg)}</p>` : ''}
+    <div class="field"><label for="l-email">Email</label><input id="l-email" type="email" autocomplete="username" autocapitalize="none"></div>
+    <div class="field"><label for="l-pass">Password</label><input id="l-pass" type="password" autocomplete="current-password"></div>
+    <button class="btn primary block" type="submit">Sign in</button></form></div>`;
+}
+function deniedScreen(){
+  app.innerHTML = `<div class="center"><div class="login"><h2>Access denied</h2><p class="muted">This account is not a SubSplit admin. Admin access can only be given by an existing admin.</p>
+    <a class="btn primary block" href="../">Go to SubSplit</a><button class="btn line block" data-act="logout">Sign out</button></div></div>`;
+}
+async function boot(){
+  if (!API.configured){ app.innerHTML = `<div class="center"><div class="login"><h2>Not connected</h2><p class="muted">Add your Supabase URL and publishable key to config.js.</p></div></div>`; return; }
+  API.consumeAuthRedirect();
+  if (!API.user){ loginScreen(); return; }
+  try { ME = await API.rpc('admin_me'); }
+  catch(e){ if (e.status === 403) { deniedScreen(); return; } if (e.status === 401){ API.forgetSession(); loginScreen('Your session expired. Please sign in again.'); return; } loginScreen(e.message); return; }
+  try { SETTINGS = await API.rpc('admin_get_settings'); } catch(e){ SETTINGS = {categories:[]}; }
+  await show(page);
+}
+
+/* ---------- shell ---------- */
+function badges(){ const d = DASH || {}; return {listings:d.pending_reviews, withdrawals:d.withdrawals_due, disputes:d.open_disputes, support:d.open_tickets}; }
+function shell(inner){
+  const b = badges();
+  const navBtn = ([k, l, i]) => `<button class="nav" data-act="go" data-v="${k}" ${page === k ? 'aria-current="page"' : ''}>${ic(i)}<span>${l}</span>${b[k] ? `<span class="badge">${b[k]}</span>` : ''}</button>`;
+  return `<div class="layout">
+    <aside class="side">${`<div class="brandline">${LOGO}<span>SubSplit<small>Admin</small></span></div>`}${PAGES.map(navBtn).join('')}
+      <div class="who"><span>@${esc(ME.username)}</span><button class="btn sm line" style="color:var(--side-ink);border-color:rgba(255,255,255,.15)" data-act="logout">${ic('out')} Sign out</button></div></aside>
+    <div style="min-width:0"><div class="topnav"><div class="bar1"><div class="brandline" style="padding:0">${LOGO}<span>Admin</span></div><button class="btn sm line" style="color:var(--side-ink);border-color:rgba(255,255,255,.15)" data-act="logout">Sign out</button></div>
+      <div class="tabs-x">${PAGES.map(navBtn).join('')}</div></div>
+      <main class="main">${inner}</main></div></div>`;
+}
+async function show(p, keepFilter){
+  page = p; try { sessionStorage.setItem('admin-page', p); } catch(e){}
+  if (!keepFilter) filter = {};
+  app.innerHTML = shell(`<p class="muted">Loading…</p>`);
+  try {
+    DASH = await API.rpc('admin_dashboard');
+    app.innerHTML = shell(await PAGE[p]());
+  } catch(e){
+    if (e.status === 403){ deniedScreen(); return; }
+    app.innerHTML = shell(`<div class="tip bad">${esc(e.message)}</div><button class="btn primary" data-act="go" data-v="${p}">Try again</button>`);
+  }
+}
+const reload = () => show(page, true);
+function chipsFor(key, options, current){ return `<div class="chips">${options.map(([v, l]) => `<button class="chip" data-act="filter" data-k="${key}" data-v="${v}" aria-pressed="${(current || '') === v}">${l}</button>`).join('')}</div>`; }
+
+/* ---------- pages ---------- */
+const PAGE = {
+  async dashboard(){
+    const d = DASH;
+    const s = (label, v, alert) => `<div class="stat ${alert ? 'alert' : ''}"><span>${label}</span><b class="num">${v}</b></div>`;
+    const todo = [[d.pending_reviews, 'listing(s) to review', 'listings'], [d.open_disputes, 'open dispute(s)', 'disputes'], [d.withdrawals_due, 'withdrawal(s) to pay', 'withdrawals'],
+      [d.open_tickets, 'support message(s) waiting', 'support'], [d.pending_payments, 'payment(s) stuck in pending', 'payments']].filter(x => x[0]);
+    return `<div class="ptitle"><h1>Dashboard</h1>${d.ledger_ok ? P('good', 'Ledger balanced') : `<button class="btn danger sm" data-act="go" data-v="wallet">Ledger mismatch: check now</button>`}</div>
+    <div class="stats">
+      ${s('Users', d.users)}${s('Hosts', d.hosts)}${s('Live listings', d.live_listings)}${s('Active seats', d.active_memberships)}
+      ${s('Payments today', naira(d.payments_today_kobo))}${s('Money held for hosts', naira(d.escrow_kobo))}${s('Platform fees earned', naira(d.fees_kobo))}
+      ${s('Customer wallets', naira(d.wallets_kobo))}${s('Host earnings owed', naira(d.earnings_kobo))}${s('Withdrawals to pay', naira(d.withdrawals_due_kobo), d.withdrawals_due)}
+    </div>
+    <div class="grid">
+      <div class="card"><h3>Needs attention</h3>${todo.length ? todo.map(([n, l, p]) => `<button class="btn line block" style="justify-content:space-between" data-act="go" data-v="${p}"><span>${n} ${l}</span><span>→</span></button>`).join('') : '<p class="muted sm">Nothing waiting. All clear.</p>'}</div>
+      <div class="card"><h3>Recent admin activity</h3>${d.recent.length ? d.recent.map(a => `<div class="row between sm"><span><b>${esc(a.action.replace(/_/g, ' ').toLowerCase())}</b> · ${esc(a.entity)} <span class="muted">by @${esc(a.admin || '?')}</span></span><span class="muted xs">${fmtDT(a.created_at)}</span></div>`).join('') : '<p class="muted sm">No activity yet.</p>'}</div>
+    </div>
+    <p class="tip">Money owed to people (customer wallets + host earnings + money held + withdrawals to pay) must always be in your bank or Paystack balance.</p>`;
+  },
+
+  async users(){
+    const list = cache.users = await API.rpc('admin_users', {p_search:filter.q || ''});
+    return `<div class="ptitle"><h1>Users</h1><span class="muted">${list.length} shown</span></div>
+    <form class="search" id="f-usearch"><input id="u-q" type="search" placeholder="Name, @username, email or phone" value="${esc(filter.q || '')}"><button class="btn primary">Search</button></form>
+    <div class="rows">${list.length ? list.map(u => `<div class="tap" data-act="user" data-id="${u.id}">
+      <span class="grow"><b>${esc(u.full_name || u.email)}</b> <span class="muted sm">@${esc(u.username)}</span><br><span class="muted xs">${esc(u.email)} · ${esc(u.phone || 'no phone')} · joined ${fmtD(u.created_at)}</span></span>
+      <span class="wrap-row" style="justify-content:flex-end">${u.is_admin ? P('brand', 'Admin') : ''}${u.verified_host ? P('good', 'Verified host') : ''}${u.status === 'SUSPENDED' ? P('bad', 'Suspended') : ''}</span>
+      <span class="amt num">${naira(u.wallet_kobo)}<br><span class="muted xs">earn ${naira(u.earnings_kobo)}</span></span></div>`).join('') : '<div><span class="muted">No users match.</span></div>'}</div>`;
+  },
+
+  async services(){
+    const list = cache.services = await API.rpc('admin_services');
+    return `<div class="ptitle"><h1>Services & pricing rules</h1><button class="btn primary" data-act="svc">${ic('plus')} Add service</button></div>
+    <p class="tip">Normal prices, seat limits, markup ranges (10%–30%), access methods and durations live here. Hosts cannot change them. Changes apply to all listings straight away and are recorded in the audit log.</p>
+    <div class="grid">${list.map(s => `<div class="card">
+      <div class="row">${tile(s)}<div class="grow"><h3>${esc(s.name)}</h3><p class="muted xs">${esc(s.category)}</p></div>${s.active ? P('good', 'On') : P('neutral', 'Off')}</div>
+      ${s.sharing_rules ? `<p class="sm muted">${esc(s.sharing_rules)}</p>` : ''}
+      ${s.notes ? `<p class="tip">${esc(s.notes)}</p>` : ''}
+      <div class="rows" style="box-shadow:none;border:1px solid var(--line)">${s.plans.map(p => `<div class="tap" data-act="plan" data-id="${p.id}" data-s="${s.id}">
+        <span class="grow"><b>${esc(p.name)}</b> ${p.active ? '' : P('neutral', 'Off')}<br><span class="muted xs">${naira(p.normal_price_kobo)} · ${p.max_seats} seats · ${ACCESS[p.access_type]} · ${p.duration_days} days · markup ${p.min_markup_pct}–${p.max_markup_pct}% · ${p.listings} listing(s)</span></span>
+        <span class="amt num">${naira(p.example_seat_kobo)}<br><span class="muted xs">max seat price</span></span></div>`).join('') || '<div><span class="muted sm">No plans yet.</span></div>'}</div>
+      <div class="wrap-row"><button class="btn sm soft" data-act="svc" data-id="${s.id}">Edit service</button><button class="btn sm line" data-act="plan" data-s="${s.id}">${ic('plus')} Add plan</button></div>
+    </div>`).join('')}</div>`;
+  },
+
+  async listings(){
+    const st = filter.status ?? 'PENDING_REVIEW';
+    const list = cache.listings = await API.rpc('admin_listings', {p_status:st});
+    return `<div class="ptitle"><h1>Listings</h1></div>
+    ${chipsFor('status', [['PENDING_REVIEW','Needs review'],['LIVE','Live'],['PAUSED','Paused'],['REJECTED','Rejected'],['SUSPENDED','Suspended'],['DRAFT','Draft'],['EXPIRED','Expired'],['','All']], st)}
+    <div class="rows">${list.length ? list.map(l => `<div class="tap" data-act="listing" data-id="${l.id}">${tile(l)}
+      <span class="grow"><b>${esc(l.service)} · ${esc(l.plan)}</b><br><span class="muted xs">@${esc(l.host_username)}${l.host_verified ? ' ✓' : ''} · ${l.markup_pct}% markup · ${l.seats_occupied}/${l.seats_total} seats · ${l.proof_uploaded ? 'proof uploaded' : 'no proof'} · ${fmtD(l.submitted_at || l.created_at)}</span></span>
+      ${pill(LST, l.status)}<span class="amt num">${naira(l.seat_kobo)}</span></div>`).join('') : '<div><span class="muted">Nothing here.</span></div>'}</div>`;
+  },
+
+  async memberships(){
+    const st = filter.status ?? 'ACTIVE';
+    const list = cache.memberships = await API.rpc('admin_memberships', {p_status:st});
+    return `<div class="ptitle"><h1>Memberships</h1></div>
+    ${chipsFor('status', [['ACTIVE','Active'],['DISPUTED','Disputed'],['COMPLETED','Completed'],['REFUNDED','Refunded'],['PARTIALLY_REFUNDED','Part refunded'],['','All']], st)}
+    <div class="rows">${list.length ? list.map(m => `<div class="tap" data-act="membership" data-id="${m.id}">
+      <span class="grow"><b>${esc(m.service)} · ${esc(m.plan)}</b><br><span class="muted xs">@${esc(m.buyer)} → host @${esc(m.host)} · ${fmtD(m.starts_at)} – ${fmtD(m.ends_at)} · money ${m.escrow.toLowerCase()}</span></span>
+      ${pill(MST, m.status)}<span class="amt num">${naira(m.amount_kobo)}</span></div>`).join('') : '<div><span class="muted">Nothing here.</span></div>'}</div>`;
+  },
+
+  async payments(){
+    const st = filter.status ?? '';
+    const list = await API.rpc('admin_payments', {p_status:st});
+    return `<div class="ptitle"><h1>Payments (Paystack)</h1></div>
+    ${chipsFor('status', [['','All'],['PENDING','Pending'],['SUCCESS','Success'],['FAILED','Failed'],['ABANDONED','Cancelled']], st)}
+    <p class="tip">Every payment is verified with Paystack on the server before money reaches a wallet. A pending payment can be re-checked here.</p>
+    <div class="rows">${list.length ? list.map(x => `<div>
+      <span class="grow"><b>${naira(x.amount_kobo)} · ${x.purpose === 'SEAT' ? 'Seat' : 'Top-up'}</b> <span class="muted sm">@${esc(x.user)}</span><br><span class="muted xs">${esc(x.reference)} · ${fmtDT(x.created_at)}${x.channel ? ' · ' + esc(x.channel) : ''}${x.note ? ' · ' + esc(x.note) : ''}</span></span>
+      ${pill(PST, x.status)}${x.status === 'PENDING' ? `<button class="btn sm soft" data-act="recheck" data-v="${esc(x.reference)}">Check with Paystack</button>` : ''}</div>`).join('') : '<div><span class="muted">No payments.</span></div>'}</div>`;
+  },
+
+  async wallet(){
+    const [bad, list] = await Promise.all([API.rpc('admin_ledger_check'), API.rpc('admin_ledger', {p_type:filter.type || ''})]);
+    const types = ['','TOP_UP','SUBSCRIPTION','HOST_EARNING_PENDING','HOST_EARNING','PLATFORM_FEE','REFUND','EARNING_REVERSED','WITHDRAWAL','WITHDRAWAL_REVERSED','TRANSFER_IN','TRANSFER_OUT','ADJUSTMENT'];
+    return `<div class="ptitle"><h1>Wallet ledger</h1><select id="ledger-type" style="max-width:240px">${types.map(t => `<option value="${t}" ${t === (filter.type || '') ? 'selected' : ''}>${t ? t.replace(/_/g, ' ').toLowerCase() : 'All types'}</option>`).join('')}</select></div>
+    ${bad.length ? `<div class="tip bad"><b>${bad.length} account(s) don't match their ledger.</b> ${bad.map(b => `@${esc(b.owner || 'SubSplit')} ${b.kind}: balance ${naira(b.balance_kobo)} vs ledger ${naira(b.ledger_kobo)}`).join('; ')}</div>` : `<p class="tip good">Every balance matches its ledger.</p>`}
+    <p class="tip">Every balance change is a row here. Balances are never edited directly. To correct one, use Users → Adjust balance (it adds a ledger row and an audit log).</p>
+    <div class="rows">${list.length ? list.map(t => `<div><span class="grow"><b>${esc(t.type.replace(/_/g, ' ').toLowerCase())}</b> <span class="muted sm">@${esc(t.user)} · ${esc(t.account.toLowerCase())}</span><br><span class="muted xs">${esc(t.description)} · ${esc(t.reference)} · ${fmtDT(t.created_at)}</span></span>
+      <span class="amt num ${t.amount_kobo > 0 ? 'in' : 'out'}">${t.amount_kobo > 0 ? '+' : '−'}${naira(Math.abs(t.amount_kobo))}<br><span class="muted xs">bal ${naira(t.balance_after_kobo)}</span></span></div>`).join('') : '<div><span class="muted">No entries.</span></div>'}</div>`;
+  },
+
+  async withdrawals(){
+    const st = filter.status ?? 'PENDING';
+    const list = await API.rpc('admin_withdrawals', {p_status:st});
+    return `<div class="ptitle"><h1>Withdrawals</h1></div>
+    ${chipsFor('status', [['PENDING','Requested'],['APPROVED','Approved'],['PAID','Paid'],['REJECTED','Rejected'],['','All']], st)}
+    <p class="tip">Send the money from your bank app or Paystack Transfers first, then tap “Mark as paid”. Rejecting returns the money to the host's earnings.</p>
+    <div class="grid">${list.length ? list.map(w => `<div class="card">
+      <div class="row between"><div><b class="num" style="font-size:20px">${naira(w.amount_kobo)}</b><p class="muted sm">@${esc(w.user)} · ${esc(w.full_name)} · ${fmtDT(w.created_at)}</p></div>${pill(WST, w.status)}</div>
+      <div class="kv"><div><span>Bank</span><b>${esc(w.bank_name)}</b></div><div><span>Account number</span><b class="num">${esc(w.account_number)} <button class="link" data-act="copy" data-v="${esc(w.account_number)}">copy</button></b></div><div><span>Account name</span><b>${esc(w.account_name)}</b></div></div>
+      ${w.admin_note ? `<p class="tip">${esc(w.admin_note)}</p>` : ''}
+      ${w.status === 'PENDING' || w.status === 'APPROVED' ? `<input placeholder="Note (required to reject)" id="wn-${w.id}">
+        <div class="wrap-row">${w.status === 'PENDING' ? `<button class="btn sm soft" data-act="wd" data-id="${w.id}" data-v="APPROVE">Approve</button>` : ''}
+        <button class="btn sm primary" data-act="wd" data-id="${w.id}" data-v="PAID" data-confirm="Tap again: I sent the money">Mark as paid</button>
+        <button class="btn sm danger" data-act="wd" data-id="${w.id}" data-v="REJECT" data-confirm="Tap again to reject">Reject</button></div>` : ''}
+    </div>`).join('') : '<div class="empty">Nothing here.</div>'}</div>`;
+  },
+
+  async disputes(){
+    const st = filter.status ?? 'OPEN';
+    const list = await API.rpc('admin_disputes', {p_status:st});
+    const reasons = {NOT_WORKING:'Stopped working', NO_ACCESS:'No access/invite', WRONG_PLAN:'Wrong plan', REMOVED:'Removed from plan', OTHER:'Other'};
+    return `<div class="ptitle"><h1>Disputes & refunds</h1></div>
+    ${chipsFor('status', [['OPEN','Open'],['IN_REVIEW','In review'],['RESOLVED','Resolved'],['CLOSED','Closed'],['','All']], st)}
+    <div class="grid">${list.length ? list.map(d => `<div class="card">
+      <div class="row between"><div><b>${esc(d.service)} · ${esc(d.plan)}</b><p class="muted sm">${reasons[d.reason] || d.reason} · ${fmtDT(d.created_at)}</p></div>${pill(DST, d.status)}</div>
+      <div class="kv"><div><span>Member</span><b>@${esc(d.buyer)} · ${esc(d.buyer_email)}</b></div><div><span>Access sent to</span><b>${esc(d.contact || '—')}</b></div>
+        <div><span>Host</span><b>@${esc(d.host)} · ${esc(d.host_email)}</b></div><div><span>Paid</span><b class="num">${naira(d.amount_kobo)} (${esc(d.escrow.toLowerCase())})</b></div></div>
+      <p class="secret">Member: ${esc(d.details)}</p>
+      ${d.host_response ? `<p class="secret">Host: ${esc(d.host_response)}</p>` : '<p class="muted sm">Host has not replied yet.</p>'}
+      ${d.resolution ? `<p class="tip good">Resolved: ${esc(d.resolution.replace(/_/g, ' ').toLowerCase())}${d.refund_kobo ? ' · ' + naira(d.refund_kobo) : ''}${d.admin_note ? ' · ' + esc(d.admin_note) : ''}</p>` : ''}
+      ${d.status === 'OPEN' || d.status === 'IN_REVIEW' ? `
+        <textarea id="dn-${d.id}" placeholder="Note to member and host (required for refunds)"></textarea>
+        <div class="row"><input id="da-${d.id}" inputmode="decimal" placeholder="Partial refund ₦" style="max-width:170px"><button class="btn sm soft" data-act="dispute" data-id="${d.id}" data-v="PARTIAL_REFUND" data-confirm="Tap again to refund part">Partial refund</button></div>
+        <div class="wrap-row">
+          <button class="btn sm line" data-act="dispute" data-id="${d.id}" data-v="IN_REVIEW">Mark in review</button>
+          <button class="btn sm line" data-act="dispute" data-id="${d.id}" data-v="REQUEST_PROOF">Ask host for proof</button>
+          <button class="btn sm danger" data-act="dispute" data-id="${d.id}" data-v="REFUND" data-confirm="Tap again: full refund">Full refund</button>
+          <button class="btn sm good" data-act="dispute" data-id="${d.id}" data-v="RELEASE" data-confirm="Tap again: pay host">Release to host</button>
+          <button class="btn sm line" data-act="dispute" data-id="${d.id}" data-v="NO_ACTION">Close (no money change)</button>
+          <button class="btn sm danger" data-act="dispute" data-id="${d.id}" data-v="SUSPEND_LISTING" data-confirm="Tap again to suspend listing">Suspend listing</button>
+          <button class="btn sm danger" data-act="dispute" data-id="${d.id}" data-v="SUSPEND_HOST" data-confirm="Tap again to suspend host">Suspend host</button>
+        </div>` : ''}
+    </div>`).join('') : '<div class="empty">No disputes here.</div>'}</div>`;
+  },
+
+  async support(){
+    const st = filter.status ?? 'OPEN';
+    const list = cache.tickets = await API.rpc('admin_tickets', {p_status:st});
+    return `<div class="ptitle"><h1>Support</h1></div>
+    ${chipsFor('status', [['OPEN','Waiting for us'],['ANSWERED','Answered'],['CLOSED','Closed'],['','All']], st)}
+    <div class="rows">${list.length ? list.map(t => `<div class="tap" data-act="ticket" data-id="${t.id}"><span class="grow"><b>${esc(t.subject)}</b><br><span class="muted xs">@${esc(t.user)} · ${esc(t.email)} · ${fmtDT(t.updated_at)} · ${(t.messages || []).length} message(s)</span></span>${pill(TST, t.status)}</div>`).join('') : '<div><span class="muted">No messages here.</span></div>'}</div>`;
+  },
+
+  async settings(){
+    const s = SETTINGS = await API.rpc('admin_get_settings');
+    return `<div class="ptitle"><h1>Platform settings</h1></div>
+    <form class="form" id="f-settings" novalidate>
+      <div class="card form"><h3>Website text</h3>
+        <div class="field"><label for="st-name">Website name</label><input id="st-name" value="${esc(s.site_name)}"></div>
+        <div class="field"><label for="st-title">Headline</label><input id="st-title" value="${esc(s.hero_title)}"></div>
+        <div class="field"><label for="st-text">Text under the headline</label><textarea id="st-text">${esc(s.hero_text)}</textarea></div>
+        <div class="field"><label for="st-notice">Announcement banner (empty = hidden)</label><input id="st-notice" value="${esc(s.notice)}"></div>
+        <div class="field"><label for="st-cats">Categories (comma separated)</label><input id="st-cats" value="${esc((s.categories || []).join(', '))}"></div></div>
+      <div class="card form"><h3>Support contacts</h3>
+        <div class="two"><div class="field"><label for="st-wa">WhatsApp (country code, digits only)</label><input id="st-wa" inputmode="tel" value="${esc(s.support_whatsapp)}" placeholder="2348012345678"></div>
+        <div class="field"><label for="st-email">Support email</label><input id="st-email" type="email" value="${esc(s.support_email)}"></div></div></div>
+      <div class="card form"><h3>Money rules</h3>
+        <div class="kv"><div><span>Platform commission</span><b>${s.fee_bps / 100}% (fixed in the database)</b></div><div><span>Host markup limit</span><b>10% to 30% (fixed)</b></div></div>
+        <div class="two"><div class="field"><label for="st-minw">Smallest withdrawal (₦)</label><input id="st-minw" inputmode="decimal" value="${nairaInput(s.min_withdrawal_kobo)}"></div>
+        <div class="field"><label for="st-mint">Smallest top-up (₦)</label><input id="st-mint" inputmode="decimal" value="${nairaInput(s.min_topup_kobo)}"></div>
+        <div class="field"><label for="st-maxt">Largest top-up (₦)</label><input id="st-maxt" inputmode="decimal" value="${nairaInput(s.max_topup_kobo)}"></div>
+        <div class="field"><label for="st-renew">Renewal window (days before end)</label><input id="st-renew" inputmode="numeric" value="${s.renewal_window_days}"></div>
+        <div class="field"><label for="st-remind">Send “ends soon” reminder (days before)</label><input id="st-remind" inputmode="numeric" value="${s.reminder_days}"></div></div>
+        <label class="check"><input type="checkbox" id="st-auto" ${s.auto_approve_listings ? 'checked' : ''}> Auto-approve listings for plans that don't require verification</label></div>
+      <button class="btn primary" type="submit">Save settings</button>
+    </form>
+    <form class="card form" id="f-broadcast" novalidate><h3>Send a notification</h3>
+      <div class="field"><label for="bc-title">Title</label><input id="bc-title" maxlength="120"></div>
+      <div class="field"><label for="bc-body">Message</label><textarea id="bc-body"></textarea></div>
+      <div class="field"><label for="bc-user">Only to this username (empty = everyone)</label><input id="bc-user" autocapitalize="none"></div>
+      <button class="btn soft" type="submit" data-confirm="Tap again to send">Send</button></form>`;
+  },
+
+  async audit(){
+    const list = await API.rpc('admin_audit_logs');
+    const changed = a => { if (!a.old_data || !a.new_data) return ''; const keys = Object.keys(a.new_data).filter(k => JSON.stringify(a.old_data[k]) !== JSON.stringify(a.new_data[k]) && !['updated_at'].includes(k));
+      return keys.length ? `<div class="diff">${keys.map(k => `${k}: ${JSON.stringify(a.old_data[k])} → ${JSON.stringify(a.new_data[k])}`).join('\n')}</div>` : ''; };
+    return `<div class="ptitle"><h1>Audit logs</h1><span class="muted">Every admin action, newest first</span></div>
+    <div class="rows">${list.length ? list.map(a => `<div style="display:grid;gap:4px"><div class="row between"><span><b>${esc(a.action.replace(/_/g, ' ').toLowerCase())}</b> · ${esc(a.entity)} <span class="muted sm">by @${esc(a.admin || '?')}</span></span><span class="muted xs">${fmtDT(a.created_at)}</span></div>
+      ${a.note ? `<span class="sm">${esc(a.note)}</span>` : ''}${changed(a)}</div>`).join('') : '<div><span class="muted">No admin actions yet.</span></div>'}</div>`;
+  }
+};
+
+/* ---------- detail sheets ---------- */
+async function userSheet(id){
+  const u = cache.users.find(x => x.id === id); if (!u) return;
+  let d = {transactions:[], listings:[], memberships:[]};
+  try { d = await API.rpc('admin_user_detail', {p_id:id}); } catch(e){ toast(e.message); }
+  const self = id === ME.id;
+  openSheet(esc(u.full_name || u.email), `
+    <div class="kv"><div><span>Username</span><b>@${esc(u.username)}</b></div><div><span>Email</span><b>${esc(u.email)}</b></div><div><span>Phone</span><b>${esc(u.phone || '—')}</b></div>
+      <div><span>Joined</span><b>${fmtD(u.created_at)}</b></div><div><span>Wallet</span><b class="num">${naira(u.wallet_kobo)}</b></div><div><span>Earnings available</span><b class="num">${naira(u.earnings_kobo)}</b></div><div><span>Earnings pending</span><b class="num">${naira(u.pending_kobo)}</b></div></div>
+    <form class="card form" id="f-user" data-id="${id}" novalidate><h3>Account</h3>
+      <div class="field"><label for="u-status">Status</label><select id="u-status" ${self ? 'disabled' : ''}><option value="ACTIVE" ${u.status === 'ACTIVE' ? 'selected' : ''}>Active</option><option value="SUSPENDED" ${u.status === 'SUSPENDED' ? 'selected' : ''}>Suspended (also suspends their live listings)</option></select></div>
+      <label class="check"><input type="checkbox" id="u-ver" ${u.verified_host ? 'checked' : ''}> Verified host (badge on their listings)</label>
+      <label class="check"><input type="checkbox" id="u-admin" ${u.is_admin ? 'checked' : ''} ${self ? 'disabled' : ''}> Admin (full access to this dashboard)</label>
+      <div class="field"><label for="u-note">Reason / note (saved in audit log)</label><input id="u-note"></div>
+      <button class="btn primary" type="submit">Save</button></form>
+    <form class="card form" id="f-adjust" data-id="${id}" novalidate><h3>Adjust balance</h3>
+      <p class="tip">Use only to correct mistakes. Adds a ledger row, notifies the user and is recorded in the audit log.</p>
+      <div class="two"><div class="field"><label for="aj-kind">Balance</label><select id="aj-kind"><option value="WALLET">Wallet</option><option value="EARNINGS">Host earnings</option></select></div>
+      <div class="field"><label for="aj-amt">Amount (₦, use − to remove)</label><input id="aj-amt" inputmode="decimal" placeholder="500 or -500"></div></div>
+      <div class="field"><label for="aj-note">Reason (required)</label><input id="aj-note"></div>
+      <button class="btn soft" type="submit" data-confirm="Tap again to adjust">Apply adjustment</button></form>
+    ${d.listings.length ? `<h3>Listings</h3><div class="rows">${d.listings.map(l => `<div class="tap" data-act="listing" data-id="${l.id}"><span class="grow">${esc(l.service)} · ${esc(l.plan)}<br><span class="muted xs">${l.occupied}/${l.seats} seats</span></span>${pill(LST, l.status)}</div>`).join('')}</div>` : ''}
+    ${d.memberships.length ? `<h3>Seats</h3><div class="rows">${d.memberships.map(m => `<div><span class="grow">${esc(m.service)}<br><span class="muted xs">until ${fmtD(m.ends_at)}</span></span>${pill(MST, m.status)}<span class="amt num">${naira(m.amount_kobo)}</span></div>`).join('')}</div>` : ''}
+    ${d.transactions.length ? `<h3>Recent ledger</h3><div class="rows">${d.transactions.map(t => `<div><span class="grow sm">${esc(t.type.replace(/_/g, ' ').toLowerCase())} · ${esc(t.account.toLowerCase())}<br><span class="muted xs">${esc(t.description)} · ${fmtDT(t.created_at)}</span></span><span class="amt num ${t.amount_kobo > 0 ? 'in' : 'out'}">${t.amount_kobo > 0 ? '+' : '−'}${naira(Math.abs(t.amount_kobo))}</span></div>`).join('')}</div>` : ''}`);
+}
+function serviceSheet(id){
+  const s = id ? cache.services.find(x => x.id === id) : {name:'', category:(SETTINGS.categories || [])[0] || 'Other', logo_color:'#5B5BD6', logo_url:'', description:'', sharing_rules:'', notes:'', active:true, sort:(cache.services || []).length + 1};
+  const cats = [...new Set([...(SETTINGS.categories || []), s.category])];
+  openSheet(id ? 'Edit service' : 'Add service', `<form class="form" id="f-svc" data-id="${id || ''}" novalidate>
+    <div class="field"><label for="sv-name">Service name</label><input id="sv-name" value="${esc(s.name)}" placeholder="e.g. Netflix"></div>
+    <div class="two"><div class="field"><label for="sv-cat">Category</label><select id="sv-cat">${cats.map(c => `<option ${c === s.category ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select></div>
+    <div class="field"><label for="sv-color">Logo colour</label><input id="sv-color" type="color" value="${esc(s.logo_color)}"></div></div>
+    <div class="field"><label for="sv-logo">Logo image URL (optional)</label><input id="sv-logo" value="${esc(s.logo_url)}" placeholder="https://…/logo.png"><small>Leave empty to show the first letter on the colour.</small></div>
+    <div class="field"><label for="sv-desc">Short description</label><input id="sv-desc" value="${esc(s.description)}"></div>
+    <div class="field"><label for="sv-rules">Allowed sharing method (shown to customers and hosts)</label><textarea id="sv-rules">${esc(s.sharing_rules)}</textarea><small>Describe how the real service allows sharing. If it does not allow sharing, switch the service off.</small></div>
+    <div class="field"><label for="sv-notes">Admin notes (private)</label><textarea id="sv-notes">${esc(s.notes)}</textarea></div>
+    <div class="two"><div class="field"><label for="sv-sort">Order</label><input id="sv-sort" inputmode="numeric" value="${s.sort}"></div>
+    <label class="check" style="align-self:end"><input type="checkbox" id="sv-active" ${s.active ? 'checked' : ''}> Service is on</label></div>
+    <button class="btn primary" type="submit">Save service</button></form>`);
+}
+function planSheet(id, sid){
+  const svc = cache.services.find(x => x.id === sid) || cache.services.find(x => x.plans.some(p => p.id === id));
+  const p = id ? svc.plans.find(x => x.id === id) : {name:'', normal_price_kobo:0, compare_price_kobo:null, max_seats:5, access_type:'FAMILY', duration_days:30, min_markup_pct:10, max_markup_pct:30,
+    verification_required:true, host_proof_required:true, active:true, customer_instructions:'', host_instructions:'', notes:'', sort:svc.plans.length + 1};
+  openSheet(`${esc(svc.name)}: ${id ? 'edit plan' : 'add plan'}`, `<form class="form" id="f-plan" data-id="${id || ''}" data-s="${svc.id}" novalidate>
+    <div class="field"><label for="pl-name">Plan name</label><input id="pl-name" value="${esc(p.name)}" placeholder="e.g. Premium, Family"></div>
+    <div class="two"><div class="field"><label for="pl-price">Normal price (₦ per period)</label><input id="pl-price" inputmode="decimal" value="${nairaInput(p.normal_price_kobo)}"><small>The full price of this plan. Hosts can't change it.</small></div>
+    <div class="field"><label for="pl-compare">Crossed-out price (₦, optional)</label><input id="pl-compare" inputmode="decimal" value="${nairaInput(p.compare_price_kobo)}"><small>What ONE person pays alone. Empty = normal price.</small></div>
+    <div class="field"><label for="pl-seats">Maximum seats</label><input id="pl-seats" type="number" inputmode="numeric" min="1" max="20" value="${p.max_seats}"><small>People who can join, not counting the host.</small></div>
+    <div class="field"><label for="pl-days">Duration (days)</label><input id="pl-days" type="number" inputmode="numeric" min="1" max="365" value="${p.duration_days}"></div>
+    <div class="field"><label for="pl-min">Minimum markup %</label><input id="pl-min" type="number" inputmode="numeric" min="10" max="30" value="${p.min_markup_pct}"></div>
+    <div class="field"><label for="pl-max">Maximum markup %</label><input id="pl-max" type="number" inputmode="numeric" min="10" max="30" value="${p.max_markup_pct}"><small>Never above 30%. Same min and max = locked markup.</small></div></div>
+    <div class="field"><label for="pl-access">Access method</label><select id="pl-access">${Object.entries(ACCESS).map(([k, l]) => `<option value="${k}" ${p.access_type === k ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
+    <p class="tip" id="pl-preview"></p>
+    <label class="check"><input type="checkbox" id="pl-ver" ${p.verification_required ? 'checked' : ''}> Admin must review every listing</label>
+    <label class="check"><input type="checkbox" id="pl-proof" ${p.host_proof_required ? 'checked' : ''}> Host must upload proof of the plan</label>
+    <label class="check"><input type="checkbox" id="pl-active" ${p.active ? 'checked' : ''}> Plan is on</label>
+    <div class="field"><label for="pl-cust">Instructions for customers</label><textarea id="pl-cust">${esc(p.customer_instructions)}</textarea></div>
+    <div class="field"><label for="pl-host">Instructions for hosts</label><textarea id="pl-host">${esc(p.host_instructions)}</textarea></div>
+    <div class="field"><label for="pl-notes">Admin notes (private)</label><textarea id="pl-notes">${esc(p.notes)}</textarea></div>
+    <div class="field"><label for="pl-sort">Order</label><input id="pl-sort" inputmode="numeric" value="${p.sort}"></div>
+    ${id ? `<p class="tip warn">Saving changes the price for every listing of this plan now. Listings with more seats than the new maximum are reduced automatically.</p>` : ''}
+    <button class="btn primary" type="submit">Save plan</button></form>`);
+  planPreview();
+}
+function planPreview(){
+  const el = $('#pl-preview'); if (!el) return;
+  const n = toKobo($('#pl-price').value), s = +$('#pl-seats').value || 1, lo = +$('#pl-min').value, hi = +$('#pl-max').value;
+  el.textContent = n ? `Seat price will be ${naira(seatPrice(n, s, lo))} to ${naira(seatPrice(n, s, hi))} (normal price + ${lo}–${hi}% markup, ÷ ${s} seats). Platform keeps 10% of each seat.` : 'Enter the normal price to see seat prices.';
+}
+async function listingSheet(id){
+  let l; try { l = await API.rpc('admin_listing_detail', {p_id:id}); } catch(e){ toast(e.message); return; }
+  const actions = {PENDING_REVIEW:['APPROVE','REJECT','SUSPEND'], LIVE:['PAUSE','REJECT','SUSPEND','EXPIRE'], PAUSED:['RELIST','SUSPEND','EXPIRE'], REJECTED:['RELIST'], SUSPENDED:['RELIST','EXPIRE'], EXPIRED:['RELIST'], DRAFT:['SUSPEND']}[l.status] || [];
+  const label = {APPROVE:['good','Approve'], REJECT:['danger','Reject'], PAUSE:['line','Pause'], SUSPEND:['danger','Suspend'], RELIST:['soft','Make live'], EXPIRE:['line','Expire']};
+  openSheet(`${esc(l.service)} · ${esc(l.plan)}`, `
+    <div class="row">${tile(l)}<div class="grow"><b>@${esc(l.host_username)}</b>${l.host_verified ? ' ' + P('good', 'Verified') : ''}<br><span class="muted xs">${esc(l.host_email)} · ${esc(l.host_phone || 'no phone')}</span></div>${pill(LST, l.status)}</div>
+    <div class="kv"><div><span>Normal price (platform)</span><b class="num">${naira(l.normal_kobo)}</b></div><div><span>Host markup</span><b>${l.markup_pct}%</b></div>
+      <div><span>Seat price</span><b class="num">${naira(l.seat_kobo)}</b></div><div><span>Seats</span><b>${l.seats_occupied} taken of ${l.seats_total}</b></div>
+      <div><span>Access</span><b>${ACCESS[l.access_type]}</b></div><div><span>Submitted</span><b>${fmtDT(l.submitted_at)}</b></div></div>
+    <h3>Proof</h3>${l.proof_path ? `<button class="btn soft" data-act="proof" data-v="${esc(l.proof_path)}">View uploaded proof</button>` : '<p class="muted sm">No proof uploaded.</p>'}
+    ${l.proof_note ? `<p class="secret">Host says: ${esc(l.proof_note)}</p>` : ''}
+    <h3>Access details (private)</h3><p class="secret">${esc(l.access_details) || '—'}</p>
+    ${l.note ? `<p class="tip">Listing note: ${esc(l.note)}</p>` : ''}${l.review_note ? `<p class="tip">Last review note: ${esc(l.review_note)}</p>` : ''}
+    ${actions.length ? `<div class="field"><label for="rv-note">Note to host (required to reject)</label><textarea id="rv-note"></textarea></div>
+      <div class="wrap-row">${actions.map(a => `<button class="btn ${label[a][0]}" data-act="review" data-id="${l.id}" data-v="${a}" ${['REJECT','SUSPEND','EXPIRE'].includes(a) ? `data-confirm="Tap again to ${label[a][1].toLowerCase()}"` : ''}>${label[a][1]}</button>`).join('')}</div>` : ''}
+    ${l.members.length ? `<h3>Members</h3><div class="rows">${l.members.map(m => `<div><span class="grow">@${esc(m.buyer)}<br><span class="muted xs">${esc(m.contact || '')} · until ${fmtD(m.ends_at)} · ${m.escrow.toLowerCase()}</span></span>${pill(MST, m.status)}</div>`).join('')}</div>` : ''}`);
+}
+function membershipSheet(id){
+  const m = cache.memberships.find(x => x.id === id); if (!m) return;
+  const held = m.escrow === 'HELD';
+  openSheet(`${esc(m.service)} seat`, `
+    <div class="kv"><div><span>Member</span><b>@${esc(m.buyer)}</b></div><div><span>Host</span><b>@${esc(m.host)}</b></div><div><span>Access sent to</span><b>${esc(m.contact || '—')} (${esc(m.access_status.toLowerCase())})</b></div>
+      <div><span>Period</span><b>${fmtD(m.starts_at)} – ${fmtD(m.ends_at)}</b></div><div><span>Paid</span><b class="num">${naira(m.amount_kobo)}</b></div>
+      <div><span>Platform fee (10%)</span><b class="num">${naira(m.fee_kobo)}</b></div><div><span>Host share</span><b class="num">${naira(m.host_kobo)}</b></div>
+      <div><span>Money</span><b>${esc(m.escrow.toLowerCase())}${m.refund_kobo ? ' · refunded ' + naira(m.refund_kobo) : ''}</b></div></div>
+    ${held ? `<div class="field"><label for="ms-note">Reason (required for refunds)</label><input id="ms-note"></div>
+      <div class="row"><input id="ms-amt" inputmode="decimal" placeholder="Partial refund ₦" style="max-width:180px"><button class="btn soft sm" data-act="mrefund" data-id="${m.id}" data-v="part" data-confirm="Tap again to refund part">Partial refund</button></div>
+      <div class="wrap-row"><button class="btn danger" data-act="mrefund" data-id="${m.id}" data-v="full" data-confirm="Tap again: full refund">Full refund</button>
+      <button class="btn good" data-act="mrelease" data-id="${m.id}" data-confirm="Tap again: pay host now">Release to host now</button></div>` : '<p class="tip">This payment is settled. No more money actions are possible.</p>'}`);
+}
+function ticketSheet(id){
+  const t = cache.tickets.find(x => x.id === id); if (!t) return;
+  openSheet(esc(t.subject), `<p class="muted sm">@${esc(t.user)} · ${esc(t.email)} · ${esc(t.phone || '')}</p>
+    <div style="display:grid;gap:8px">${(t.messages || []).map(m => `<div class="msg ${m.from_admin ? 'admin' : 'user'}">${esc(m.body)}<br><span class="muted xs">${m.from_admin ? 'Support' : '@' + esc(t.user)} · ${fmtDT(m.created_at)}</span></div>`).join('')}</div>
+    <form class="form" id="f-treply" data-id="${t.id}" novalidate><div class="field"><label for="tr-body">Reply</label><textarea id="tr-body"></textarea></div>
+    <div class="wrap-row"><button class="btn primary" type="submit" name="send">Send reply</button><button class="btn line" type="button" data-act="tclose" data-id="${t.id}">Close conversation</button></div></form>`);
+}
+
+/* ---------- actions ---------- */
+async function run(btn, fn, ok, after){
+  const old = btn ? btn.innerHTML : '';
+  if (btn){ btn.disabled = true; btn.textContent = 'Working…'; }
+  try { await fn(); toast(ok); closeSheet(); if (after !== false) await reload(); return true; }
+  catch(e){ toast(e.message); if (e.status === 403) deniedScreen(); return false; }
+  finally { if (btn && btn.isConnected){ btn.disabled = false; btn.innerHTML = old; } }
+}
+document.addEventListener('click', async e => {
+  const el = e.target.closest('[data-act]');
+  if (!el){ if (e.target.id === 'sheet') closeSheet(); return; }
+  if (el.dataset.confirm && !el.dataset.armed){
+    e.preventDefault(); const old = el.innerHTML; el.dataset.armed = '1'; el.textContent = el.dataset.confirm;
+    setTimeout(() => { if (el.isConnected){ delete el.dataset.armed; el.innerHTML = old; } }, 3500); return;
+  }
+  const a = el.dataset.act, id = el.dataset.id, v = el.dataset.v;
+  switch (a){
+    case 'go': closeSheet(); show(v); window.scrollTo(0, 0); break;
+    case 'close': closeSheet(); break;
+    case 'logout': await API.signOut(); loginScreen(); break;
+    case 'filter': filter[el.dataset.k] = v; show(page, true); break;
+    case 'copy': copyText(v); break;
+    case 'user': userSheet(id); break;
+    case 'svc': serviceSheet(id); break;
+    case 'plan': planSheet(id, el.dataset.s); break;
+    case 'listing': listingSheet(id); break;
+    case 'membership': membershipSheet(id); break;
+    case 'ticket': ticketSheet(id); break;
+    case 'proof': try { window.open(await API.signedUrl('host-proofs', v, 600), '_blank', 'noopener'); } catch(err){ toast(err.message); } break;
+    case 'review': run(el, () => API.rpc('admin_review_listing', {p_id:id, p_action:v, p_note:$('#rv-note').value}), 'Listing updated.'); break;
+    case 'recheck': run(el, async () => { const r = await API.fn('payments-verify', {reference:v}); toast(r.message || r.status); }, 'Checked with Paystack.'); break;
+    case 'wd': run(el, () => API.rpc('admin_withdrawal_action', {p_id:id, p_action:v, p_note:($('#wn-' + id) || {}).value || ''}), v === 'PAID' ? 'Marked as paid.' : v === 'APPROVE' ? 'Approved.' : 'Rejected. Money returned to the host.'); break;
+    case 'dispute': {
+      const note = ($('#dn-' + id) || {}).value || '', amt = toKobo(($('#da-' + id) || {}).value || '');
+      run(el, () => API.rpc('admin_dispute_action', {p_id:id, p_action:v, p_amount_kobo:v === 'PARTIAL_REFUND' ? amt : null, p_note:note}), 'Done.'); break; }
+    case 'mrefund': run(el, () => API.rpc('admin_refund', {p_id:id, p_amount_kobo:v === 'part' ? toKobo($('#ms-amt').value) : null, p_note:$('#ms-note').value}), 'Refunded to the member\'s wallet.'); break;
+    case 'mrelease': run(el, () => API.rpc('admin_release', {p_id:id, p_note:$('#ms-note').value}), 'Released to the host.'); break;
+    case 'tclose': run(el, () => API.rpc('admin_reply_ticket', {p_id:id, p_body:$('#tr-body').value, p_close:true}), 'Conversation closed.'); break;
+  }
+});
+document.addEventListener('input', e => { if (['pl-price','pl-seats','pl-min','pl-max'].includes(e.target.id)) planPreview(); });
+document.addEventListener('change', e => { if (e.target.id === 'ledger-type'){ filter.type = e.target.value; show('wallet', true); } });
+document.addEventListener('submit', async e => {
+  e.preventDefault();
+  const f = e.target, btn = f.querySelector('[type=submit]'), val = id => ($('#' + id) || {}).value || '', chk = id => !!($('#' + id) || {}).checked;
+  switch (f.id){
+    case 'f-login': {
+      btn.disabled = true; btn.textContent = 'Signing in…';
+      try { await API.signIn(val('l-email').trim(), val('l-pass')); await boot(); }
+      catch(err){ loginScreen(err.message); }
+      break; }
+    case 'f-usearch': filter.q = val('u-q'); show('users', true); break;
+    case 'f-user': run(btn, () => API.rpc('admin_update_user', {p_id:f.dataset.id, p_status:val('u-status'), p_verified:chk('u-ver'), p_is_admin:chk('u-admin'), p_note:val('u-note')}), 'User updated.'); break;
+    case 'f-adjust': {
+      if (!btn.dataset.armed){ btn.dataset.armed = '1'; const o = btn.innerHTML; btn.textContent = btn.dataset.confirm; setTimeout(() => { if (btn.isConnected){ delete btn.dataset.armed; btn.innerHTML = o; } }, 3500); break; }
+      run(btn, () => API.rpc('admin_adjust_wallet', {p_id:f.dataset.id, p_kind:val('aj-kind'), p_amount_kobo:toKobo(val('aj-amt')), p_note:val('aj-note')}), 'Balance adjusted.'); break; }
+    case 'f-svc': run(btn, () => API.rpc('admin_save_service', {p:{id:f.dataset.id || null, name:val('sv-name'), category:val('sv-cat'), logo_color:val('sv-color'), logo_url:val('sv-logo').trim(),
+      description:val('sv-desc'), sharing_rules:val('sv-rules'), notes:val('sv-notes'), sort:+val('sv-sort') || 0, active:chk('sv-active')}}), 'Service saved.'); break;
+    case 'f-plan': run(btn, () => API.rpc('admin_save_plan', {p:{id:f.dataset.id || null, service_id:f.dataset.s, name:val('pl-name'), normal_price_kobo:toKobo(val('pl-price')),
+      compare_price_kobo:val('pl-compare') ? toKobo(val('pl-compare')) : null, max_seats:+val('pl-seats'), duration_days:+val('pl-days'), min_markup_pct:+val('pl-min'), max_markup_pct:+val('pl-max'),
+      access_type:val('pl-access'), verification_required:chk('pl-ver'), host_proof_required:chk('pl-proof'), active:chk('pl-active'),
+      customer_instructions:val('pl-cust'), host_instructions:val('pl-host'), notes:val('pl-notes'), sort:+val('pl-sort') || 0}}), 'Plan saved. Listings now use these rules.'); break;
+    case 'f-treply': run(btn, () => API.rpc('admin_reply_ticket', {p_id:f.dataset.id, p_body:val('tr-body'), p_close:false}), 'Reply sent.'); break;
+    case 'f-settings': run(btn, () => API.rpc('admin_save_settings', {p:{site_name:val('st-name'), hero_title:val('st-title'), hero_text:val('st-text'), notice:val('st-notice'),
+      categories:val('st-cats').split(',').map(c => c.trim()).filter(Boolean), support_whatsapp:val('st-wa'), support_email:val('st-email').trim(),
+      min_withdrawal_kobo:toKobo(val('st-minw')), min_topup_kobo:toKobo(val('st-mint')), max_topup_kobo:toKobo(val('st-maxt')),
+      renewal_window_days:+val('st-renew'), reminder_days:+val('st-remind'), auto_approve_listings:chk('st-auto')}}), 'Settings saved.'); break;
+    case 'f-broadcast': {
+      if (!btn.dataset.armed){ btn.dataset.armed = '1'; const o = btn.innerHTML; btn.textContent = btn.dataset.confirm; setTimeout(() => { if (btn.isConnected){ delete btn.dataset.armed; btn.innerHTML = o; } }, 3500); break; }
+      run(btn, async () => { const n = await API.rpc('admin_broadcast', {p_title:val('bc-title'), p_body:val('bc-body'), p_username:val('bc-user').trim() || null}); toast(`Sent to ${n} user(s).`); }, 'Notification sent.'); break; }
+  }
+});
+boot();
+</script>
+</body>
+</html>
