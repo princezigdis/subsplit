@@ -167,6 +167,7 @@ const ICONS = {
   bank:'<path d="M3 10 12 4l9 6"/><path d="M5 10v8M9.5 10v8M14.5 10v8M19 10v8M3 20h18"/>', flag:'<path d="M5 21V4M5 4h11l-2 4 2 4H5"/>',
   chat:'<path d="M4 19.5 5.3 16A8 8 0 1 1 8 18.7z"/>', cog:'<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',
   log:'<path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M8 13h8M8 17h5"/>',
+  check:'<path d="m5 12.5 4.5 4.5L19 7.5"/>', search:'<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
   x:'<path d="M6 6l12 12M18 6 6 18"/>', copy:'<rect x="8" y="8" width="12" height="12" rx="2.5"/><path d="M16 8V6.5A2.5 2.5 0 0 0 13.5 4h-7A2.5 2.5 0 0 0 4 6.5v7A2.5 2.5 0 0 0 6.5 16H8"/>',
   out:'<path d="M15 4h3.5A1.5 1.5 0 0 1 20 5.5v13a1.5 1.5 0 0 1-1.5 1.5H15"/><path d="M10 8l-4 4 4 4M6 12h10"/>', plus:'<path d="M12 5v14M5 12h14"/>'
 };
@@ -177,12 +178,16 @@ const LST = {DRAFT:['neutral','Draft'], PENDING_REVIEW:['warn','Needs review'], 
 const MST = {ACTIVE:['good','Active'], DISPUTED:['warn','Disputed'], COMPLETED:['neutral','Completed'], REFUNDED:['bad','Refunded'], PARTIALLY_REFUNDED:['neutral','Part refunded']};
 const PST = {PENDING:['warn','Pending'], SUCCESS:['good','Success'], FAILED:['bad','Failed'], ABANDONED:['neutral','Cancelled']};
 const WST = {PENDING:['warn','Requested'], APPROVED:['brand','Approved'], PAID:['good','Paid'], REJECTED:['bad','Rejected']};
+const XST = {PENDING:['warn','Pending'], APPROVED:['good','Approved'], REJECTED:['bad','Rejected']};
+const RST = {PENDING:['warn','Waiting'], IN_PROGRESS:['brand','In progress'], ADDED:['good','Added'], DECLINED:['bad','Declined']};
 const DST = {OPEN:['warn','Open'], IN_REVIEW:['brand','In review'], RESOLVED:['good','Resolved'], CLOSED:['neutral','Closed']};
 const TST = {OPEN:['warn','Waiting for us'], ANSWERED:['good','Answered'], CLOSED:['neutral','Closed']};
 const pill = (map, k) => P(...(map[k] || ['neutral', k]));
 
-const PAGES = [['dashboard','Dashboard','home'],['users','Users','users'],['services','Services','grid'],['listings','Listings','list'],['memberships','Memberships','seat'],
-  ['payments','Payments','card'],['wallet','Wallet ledger','book'],['withdrawals','Withdrawals','bank'],['disputes','Disputes','flag'],['support','Support','chat'],['settings','Settings','cog'],['audit','Audit logs','log']];
+const PAGES = [['dashboard','Dashboard','home'],['desk','Approval desk','check'],['search','Find transaction','search'],['users','Users','users'],['services','Services','grid'],['listings','Listings','list'],
+  ['proofs','Proof verification','check'],['memberships','Memberships','seat'],['chats','Order chats','chat'],['payments','Payments','card'],['wallet','Wallet ledger','book'],['credits','Wallet credits','plus'],
+  ['withdrawals','Withdrawals','bank'],['disputes','Disputes','flag'],['support','Support','chat'],['requests','Subscription requests','list'],['promos','Referrals & promos','flag'],['audit','Audit logs','log'],['settings','Settings','cog']];
+let BADGE = {};
 let ME = null, DASH = null, SETTINGS = null, page = 'dashboard', filter = {}, cache = {};
 try { page = PAGES.some(p => p[0] === sessionStorage.getItem('admin-page')) ? sessionStorage.getItem('admin-page') : 'dashboard'; } catch(e){}
 const app = $('#app');
@@ -216,7 +221,7 @@ async function boot(){
 }
 
 /* ---------- shell ---------- */
-function badges(){ const d = DASH || {}; return {listings:d.pending_reviews, withdrawals:d.withdrawals_due, disputes:d.open_disputes, support:d.open_tickets}; }
+function badges(){ return {listings:BADGE.listings, withdrawals:BADGE.withdrawals, disputes:BADGE.disputes, support:BADGE.support, proofs:BADGE.proofs, requests:BADGE.requests, desk:BADGE.desk}; }
 function shell(inner){
   const b = badges();
   const navBtn = ([k, l, i]) => `<button class="nav" data-act="go" data-v="${k}" ${page === k ? 'aria-current="page"' : ''}>${ic(i)}<span>${l}</span>${b[k] ? `<span class="badge">${b[k]}</span>` : ''}</button>`;
@@ -232,7 +237,7 @@ async function show(p, keepFilter){
   if (!keepFilter) filter = {};
   app.innerHTML = shell(`<p class="muted">Loading…</p>`);
   try {
-    DASH = await API.rpc('admin_dashboard');
+    [DASH, BADGE] = await Promise.all([API.rpc('admin_dashboard'), API.rpc('admin_badges')]);
     app.innerHTML = shell(await PAGE[p]());
   } catch(e){
     if (e.status === 403){ deniedScreen(); return; }
@@ -303,7 +308,7 @@ const PAGE = {
     return `<div class="ptitle"><h1>Memberships</h1></div>
     ${chipsFor('status', [['ACTIVE','Active'],['DISPUTED','Disputed'],['COMPLETED','Completed'],['REFUNDED','Refunded'],['PARTIALLY_REFUNDED','Part refunded'],['','All']], st)}
     <div class="rows">${list.length ? list.map(m => `<div class="tap" data-act="membership" data-id="${m.id}">
-      <span class="grow"><b>${esc(m.service)} · ${esc(m.plan)}</b><br><span class="muted xs">@${esc(m.buyer)} → host @${esc(m.host)} · ${fmtD(m.starts_at)} – ${fmtD(m.ends_at)} · money ${m.escrow.toLowerCase()}</span></span>
+      <span class="grow"><b>${esc(m.service)} · ${esc(m.plan)}</b><br><span class="muted xs">${esc(m.txn_ref || '')} · @${esc(m.buyer)} → host @${esc(m.host)} · ${fmtD(m.starts_at)} – ${fmtD(m.ends_at)} · money ${m.escrow.toLowerCase()}${m.escrow === 'HELD' ? ' until ' + fmtD(m.release_at) : ''}</span></span>
       ${pill(MST, m.status)}<span class="amt num">${naira(m.amount_kobo)}</span></div>`).join('') : '<div><span class="muted">Nothing here.</span></div>'}</div>`;
   },
 
@@ -320,7 +325,7 @@ const PAGE = {
 
   async wallet(){
     const [bad, list] = await Promise.all([API.rpc('admin_ledger_check'), API.rpc('admin_ledger', {p_type:filter.type || ''})]);
-    const types = ['','TOP_UP','SUBSCRIPTION','HOST_EARNING_PENDING','HOST_EARNING','PLATFORM_FEE','REFUND','EARNING_REVERSED','WITHDRAWAL','WITHDRAWAL_REVERSED','TRANSFER_IN','TRANSFER_OUT','ADJUSTMENT'];
+    const types = ['','TOP_UP','SUBSCRIPTION','PURCHASE_FEE','HOST_EARNING_PENDING','PENDING_RELEASED','HOST_EARNING','PLATFORM_FEE','REFUND','EARNING_REVERSED','WITHDRAWAL','WITHDRAWAL_FEE','WITHDRAWAL_REVERSED','TRANSFER_IN','TRANSFER_OUT','ADJUSTMENT','ADMIN_CREDIT','REFERRAL_REWARD'];
     return `<div class="ptitle"><h1>Wallet ledger</h1><select id="ledger-type" style="max-width:240px">${types.map(t => `<option value="${t}" ${t === (filter.type || '') ? 'selected' : ''}>${t ? t.replace(/_/g, ' ').toLowerCase() : 'All types'}</option>`).join('')}</select></div>
     ${bad.length ? `<div class="tip bad"><b>${bad.length} account(s) don't match their ledger.</b> ${bad.map(b => `@${esc(b.owner || 'SubSplit')} ${b.kind}: balance ${naira(b.balance_kobo)} vs ledger ${naira(b.ledger_kobo)}`).join('; ')}</div>` : `<p class="tip good">Every balance matches its ledger.</p>`}
     <p class="tip">Every balance change is a row here. Balances are never edited directly. To correct one, use Users → Adjust balance (it adds a ledger row and an audit log).</p>
@@ -335,7 +340,7 @@ const PAGE = {
     ${chipsFor('status', [['PENDING','Requested'],['APPROVED','Approved'],['PAID','Paid'],['REJECTED','Rejected'],['','All']], st)}
     <p class="tip">Send the money from your bank app or Paystack Transfers first, then tap “Mark as paid”. Rejecting returns the money to the host's earnings.</p>
     <div class="grid">${list.length ? list.map(w => `<div class="card">
-      <div class="row between"><div><b class="num" style="font-size:20px">${naira(w.amount_kobo)}</b><p class="muted sm">@${esc(w.user)} · ${esc(w.full_name)} · ${fmtDT(w.created_at)}</p></div>${pill(WST, w.status)}</div>
+      <div class="row between"><div><b class="num" style="font-size:20px">Pay ${naira(w.payout_kobo)}</b><p class="muted sm">Requested ${naira(w.amount_kobo)} − fee ${naira(w.fee_kobo)}<br>@${esc(w.user)} · ${esc(w.full_name)} · ${fmtDT(w.created_at)}<br>ID ${esc(w.reference)}</p></div>${pill(WST, w.status)}</div>
       <div class="kv"><div><span>Bank</span><b>${esc(w.bank_name)}</b></div><div><span>Account number</span><b class="num">${esc(w.account_number)} <button class="link" data-act="copy" data-v="${esc(w.account_number)}">copy</button></b></div><div><span>Account name</span><b>${esc(w.account_name)}</b></div></div>
       ${w.admin_note ? `<p class="tip">${esc(w.admin_note)}</p>` : ''}
       ${w.status === 'PENDING' || w.status === 'APPROVED' ? `<input placeholder="Note (required to reject)" id="wn-${w.id}">
@@ -348,14 +353,15 @@ const PAGE = {
   async disputes(){
     const st = filter.status ?? 'OPEN';
     const list = await API.rpc('admin_disputes', {p_status:st});
-    const reasons = {NOT_WORKING:'Stopped working', NO_ACCESS:'No access/invite', WRONG_PLAN:'Wrong plan', REMOVED:'Removed from plan', OTHER:'Other'};
+    const reasons = {NOT_WORKING:'Stopped working', NO_ACCESS:'No access/invite', WRONG_PLAN:'Wrong plan', REMOVED:'Removed from plan', OTHER:'Other', HOST_NO_RESPONSE:'Host not responding', INVALID_CREDENTIALS:'Invalid credentials', ACCESS_NOT_WORKING:'Access not working', WRONG_SUBSCRIPTION:'Wrong subscription', PAYMENT_ORDER:'Payment/order problem'};
     return `<div class="ptitle"><h1>Disputes & refunds</h1></div>
     ${chipsFor('status', [['OPEN','Open'],['IN_REVIEW','In review'],['RESOLVED','Resolved'],['CLOSED','Closed'],['','All']], st)}
     <div class="grid">${list.length ? list.map(d => `<div class="card">
-      <div class="row between"><div><b>${esc(d.service)} · ${esc(d.plan)}</b><p class="muted sm">${reasons[d.reason] || d.reason} · ${fmtDT(d.created_at)}</p></div>${pill(DST, d.status)}</div>
+      <div class="row between"><div><b>${esc(d.service)} · ${esc(d.plan)}</b><p class="muted sm">${reasons[d.reason] || d.reason} · raised by the <b>${esc((d.raised_by_role || 'BUYER').toLowerCase())}</b> · ${fmtDT(d.created_at)}<br>Order ${esc(d.txn_ref || '')}</p></div>${pill(DST, d.status)}</div>
+      <button class="btn sm soft" data-act="achat" data-id="${d.membership_id}">${ic('chat')} Open order chat</button>
       <div class="kv"><div><span>Member</span><b>@${esc(d.buyer)} · ${esc(d.buyer_email)}</b></div><div><span>Access sent to</span><b>${esc(d.contact || '—')}</b></div>
         <div><span>Host</span><b>@${esc(d.host)} · ${esc(d.host_email)}</b></div><div><span>Paid</span><b class="num">${naira(d.amount_kobo)} (${esc(d.escrow.toLowerCase())})</b></div></div>
-      <p class="secret">Member: ${esc(d.details)}</p>
+      <p class="secret">${esc((d.raised_by_role || 'BUYER') === 'HOST' ? 'Host' : 'Member')} report: ${esc(d.details)}</p>
       ${d.host_response ? `<p class="secret">Host: ${esc(d.host_response)}</p>` : '<p class="muted sm">Host has not replied yet.</p>'}
       ${d.resolution ? `<p class="tip good">Resolved: ${esc(d.resolution.replace(/_/g, ' ').toLowerCase())}${d.refund_kobo ? ' · ' + naira(d.refund_kobo) : ''}${d.admin_note ? ' · ' + esc(d.admin_note) : ''}</p>` : ''}
       ${d.status === 'OPEN' || d.status === 'IN_REVIEW' ? `
@@ -392,10 +398,11 @@ const PAGE = {
         <div class="field"><label for="st-notice">Announcement banner (empty = hidden)</label><input id="st-notice" value="${esc(s.notice)}"></div>
         <div class="field"><label for="st-cats">Categories (comma separated)</label><input id="st-cats" value="${esc((s.categories || []).join(', '))}"></div></div>
       <div class="card form"><h3>Support contacts</h3>
-        <div class="two"><div class="field"><label for="st-wa">WhatsApp (country code, digits only)</label><input id="st-wa" inputmode="tel" value="${esc(s.support_whatsapp)}" placeholder="2348012345678"></div>
+        <div class="field"><label for="st-walink">WhatsApp Support Link</label><input id="st-walink" inputmode="url" autocapitalize="none" value="${esc(s.support_whatsapp_link || '')}" placeholder="https://wa.me/2348012345678"><small>Customers tap this to chat with you. Use a wa.me link or a chat.whatsapp.com invite link. Empty = hide the button.</small></div>
+        <div class="two"><div class="field"><label for="st-wa">Old WhatsApp number (digits, optional)</label><input id="st-wa" inputmode="tel" value="${esc(s.support_whatsapp)}" placeholder="2348012345678"></div>
         <div class="field"><label for="st-email">Support email</label><input id="st-email" type="email" value="${esc(s.support_email)}"></div></div></div>
       <div class="card form"><h3>Money rules</h3>
-        <div class="kv"><div><span>Platform commission</span><b>${s.fee_bps / 100}% (fixed in the database)</b></div><div><span>Host markup limit</span><b>10% to 30% (fixed)</b></div></div>
+        <div class="kv"><div><span>Platform commission</span><b>${s.fee_bps / 100}% (fixed in the database)</b></div><div><span>Host markup limit</span><b>10% to 30% (fixed)</b></div><div><span>Purchase fee</span><b>₦200 flat (fixed)</b></div><div><span>Withdrawal fee</span><b>₦200 flat (fixed)</b></div><div><span>Escrow for host earnings</span><b>30 days (fixed)</b></div><div><span>Minimums</span><b>Deposit ₦100 · Withdrawal ₦1,000 or more</b></div></div>
         <div class="two"><div class="field"><label for="st-minw">Smallest withdrawal (₦)</label><input id="st-minw" inputmode="decimal" value="${nairaInput(s.min_withdrawal_kobo)}"></div>
         <div class="field"><label for="st-mint">Smallest top-up (₦)</label><input id="st-mint" inputmode="decimal" value="${nairaInput(s.min_topup_kobo)}"></div>
         <div class="field"><label for="st-maxt">Largest top-up (₦)</label><input id="st-maxt" inputmode="decimal" value="${nairaInput(s.max_topup_kobo)}"></div>
@@ -411,6 +418,94 @@ const PAGE = {
       <button class="btn soft" type="submit" data-confirm="Tap again to send">Send</button></form>`;
   },
 
+  async desk(){
+    const d = await API.rpc('admin_approval_desk'), t = d.totals;
+    const s = (label, v, alert) => `<div class="stat ${alert ? 'alert' : ''}"><span>${label}</span><b class="num">${v}</b></div>`;
+    return `<div class="ptitle"><h1>Payment & Order Approval Desk</h1></div>
+    <div class="stats">${s('Pending payments', t.pending_payments + ' · ' + naira(t.pending_payments_kobo), t.pending_payments)}${s('Withdrawals to pay', t.pending_withdrawals + ' · ' + naira(t.pending_withdrawals_kobo), t.pending_withdrawals)}${s('Orders needing attention', t.attention_orders, t.attention_orders)}${s('Rejected / failed (7 days)', t.rejected)}</div>
+    <h3>Pending payments</h3>
+    <div class="grid">${d.payments.length ? d.payments.map(x => `<div class="card"><div class="row between"><div><b class="num">${naira(x.amount_kobo)}</b> <span class="muted sm">${x.purpose === 'SEAT' ? 'Seat' : 'Deposit'} · @${esc(x.user)}</span><p class="muted xs">${esc(x.reference)} · ${fmtDT(x.created_at)}</p></div>${pill(PST, x.status)}</div>
+      <input id="pn-${esc(x.reference)}" placeholder="Reason (required to reject)">
+      <div class="wrap-row"><button class="btn sm primary" data-act="recheck" data-v="${esc(x.reference)}">Approve: check with Paystack</button><button class="btn sm danger" data-act="preject" data-v="${esc(x.reference)}" data-confirm="Tap again to reject">Reject</button><button class="btn sm line" data-act="findtx" data-v="${esc(x.reference)}">Details</button></div></div>`).join('') : '<div class="empty">No pending payments.</div>'}</div>
+    <h3>Withdrawals waiting</h3>
+    <div class="grid">${d.withdrawals.length ? d.withdrawals.map(w => `<div class="card"><div class="row between"><div><b class="num">Pay ${naira(w.payout_kobo)}</b> <span class="muted sm">@${esc(w.user)}</span><p class="muted xs">Requested ${naira(w.amount_kobo)} − fee ${naira(w.fee_kobo)} · ${esc(w.reference)}</p></div>${pill(WST, w.status)}</div>
+      <div class="kv"><div><span>Bank</span><b>${esc(w.bank_name)} · ${esc(w.account_number)}</b></div><div><span>Account name</span><b>${esc(w.account_name)}</b></div></div>
+      <input id="wn-${w.id}" placeholder="Note (required to reject)">
+      <div class="wrap-row">${w.status === 'PENDING' ? `<button class="btn sm soft" data-act="wd" data-id="${w.id}" data-v="APPROVE">Approve</button>` : ''}
+        <button class="btn sm primary" data-act="wd" data-id="${w.id}" data-v="PAID" data-confirm="Tap again: I sent the money">Mark as paid</button>
+        <button class="btn sm danger" data-act="wd" data-id="${w.id}" data-v="REJECT" data-confirm="Tap again to reject">Reject</button></div></div>`).join('') : '<div class="empty">No withdrawals waiting.</div>'}</div>
+    <h3>Orders needing attention</h3>
+    <div class="rows">${d.orders.length ? d.orders.map(o => `<div class="tap" data-act="achat" data-id="${o.id}"><span class="grow"><b>${esc(o.service)}</b> <span class="muted sm">${esc(o.txn_ref || '')}</span><br><span class="muted xs">@${esc(o.buyer)} → @${esc(o.host)} · ${esc(o.why)}</span></span>${pill(MST, o.status)}<span class="amt num">${naira(o.total_kobo)}</span></div>`).join('') : '<div><span class="muted">None.</span></div>'}</div>
+    <h3>Rejected & failed (last 7 days)</h3>
+    <div class="rows">${d.rejected.length ? d.rejected.map(r => `<div class="tap" data-act="findtx" data-v="${esc(r.ref)}"><span class="grow"><b>${esc(r.kind.toLowerCase())}</b> <span class="muted sm">@${esc(r.user)} · ${esc(r.ref)}</span><br><span class="muted xs">${esc(r.note || '')} · ${fmtDT(r.at)}</span></span>${pill({FAILED:['bad','Failed'],ABANDONED:['neutral','Cancelled'],REJECTED:['bad','Rejected']}, r.status)}<span class="amt num">${naira(r.amount_kobo)}</span></div>`).join('') : '<div><span class="muted">None.</span></div>'}</div>
+    <h3>Pending by user</h3>
+    <div class="rows">${d.by_user.length ? d.by_user.map(u => `<div class="tap" data-act="userid" data-id="${u.user_id}"><span class="grow"><b>@${esc(u.user)}</b><br><span class="muted xs">${u.payments} payment(s) · ${u.withdrawals} withdrawal(s)</span></span><span class="amt num">${naira(u.amount_kobo)}</span></div>`).join('') : '<div><span class="muted">None.</span></div>'}</div>`;
+  },
+
+  async search(){
+    const r = cache.search;
+    return `<div class="ptitle"><h1>Find a transaction</h1></div>
+    <form class="search" id="f-search"><input id="sq" placeholder="Transaction ID, order ID, payment reference or withdrawal ID" value="${esc(filter.sq || '')}" autocapitalize="none"><button class="btn primary">Search</button></form>
+    <p class="tip">Works with order IDs (SUB-…), payment references (SS-…), withdrawal IDs (WDR-…), ledger IDs (PAY-, REL-, CRD-…) and dispute IDs.</p>
+    ${r ? txnView(r) : ''}`;
+  },
+
+  async proofs(){
+    const st = filter.status ?? 'PENDING';
+    const list = cache.proofs = await API.rpc('admin_proofs', {p_status:st});
+    return `<div class="ptitle"><h1>Proof of purchase verification</h1></div>
+    ${chipsFor('status', [['PENDING','Pending'],['APPROVED','Approved'],['REJECTED','Rejected'],['','All']], st)}
+    <p class="tip">A listing cannot go live until its proof is approved here. Open the proof, check that it matches the service and plan, then approve or reject with a reason.</p>
+    <div class="rows">${list.length ? list.map(h => `<div class="tap" data-act="proofsheet" data-id="${h.id}"><span class="grow"><b>${esc(h.service)} · ${esc(h.plan)}</b><br><span class="muted xs">@${esc(h.host)}${h.host_verified ? ' ✓' : ''} · submitted ${fmtDT(h.submitted_at)}${h.agreement_at ? ' · escrow agreement ✓' : ''}</span></span>${pill(XST, h.status)}</div>`).join('') : '<div><span class="muted">Nothing here.</span></div>'}</div>`;
+  },
+
+  async chats(){
+    const list = cache.chats = await API.rpc('admin_order_chats', {p_search:filter.cq || ''});
+    return `<div class="ptitle"><h1>Order chats</h1><span class="muted">${list.length} orders</span></div>
+    <form class="search" id="f-csearch"><input id="cq" placeholder="Order ID or username" value="${esc(filter.cq || '')}" autocapitalize="none"><button class="btn primary">Search</button></form>
+    <div class="rows">${list.length ? list.map(o => `<div class="tap" data-act="achat" data-id="${o.id}">${tile(o)}<span class="grow"><b>${esc(o.service)}</b> <span class="muted sm">${esc(o.txn_ref || '')}</span><br><span class="muted xs">@${esc(o.buyer)} ↔ @${esc(o.host)} · ${o.messages} message(s)${o.last_message ? ' · “' + esc(o.last_message) + '”' : ''}</span></span>${pill(MST, o.status)}</div>`).join('') : '<div><span class="muted">No orders match.</span></div>'}</div>`;
+  },
+
+  async requests(){
+    const st = filter.status ?? 'PENDING';
+    const list = cache.requests = await API.rpc('admin_requests', {p_status:st});
+    return `<div class="ptitle"><h1>Subscription requests</h1></div>
+    ${chipsFor('status', [['PENDING','Waiting'],['IN_PROGRESS','In progress'],['ADDED','Added'],['DECLINED','Declined'],['','All']], st)}
+    <p class="tip">When you add a service with the same name in Services, matching requests close automatically and the users are notified.</p>
+    <div class="rows">${list.length ? list.map(r => `<div class="tap" data-act="reqsheet" data-id="${r.id}"><span class="grow"><b>${esc(r.service_name)}</b>${r.same_requests > 1 ? ` <span class="pill brand">${r.same_requests} people asked</span>` : ''}<br><span class="muted xs">@${esc(r.user)} · ${fmtDT(r.created_at)}${r.details ? ' · ' + esc(r.details) : ''}</span></span>${pill(RST, r.status)}</div>`).join('') : '<div><span class="muted">Nothing here.</span></div>'}</div>`;
+  },
+
+  async promos(){
+    const [list, refs] = await Promise.all([API.rpc('admin_promos'), API.rpc('admin_referrals')]);
+    cache.promos = list;
+    return `<div class="ptitle"><h1>Referrals & promotions</h1><button class="btn primary" data-act="promo">${ic('plus')} New promotion</button></div>
+    <p class="tip">Rewards are paid through the ledger once, on the referred person's first qualifying purchase while a promotion is live. Reward money comes from the platform account.</p>
+    <div class="grid">${list.length ? list.map(p => `<div class="card tap" data-act="promo" data-id="${p.id}">${p.banner_url ? `<img src="${esc(p.banner_url)}" alt="" style="width:100%;max-height:120px;object-fit:cover;border-radius:12px">` : ''}
+      <div class="row between"><h3>${esc(p.title)}</h3>${p.live ? P('good', 'Live') : p.active ? P('neutral', 'Scheduled / ended') : P('neutral', 'Off')}</div>
+      <p class="muted sm">Referrer ${naira(p.reward_referrer_kobo)} · friend ${naira(p.reward_referee_kobo)} · min purchase ${naira(p.min_purchase_kobo)} · ${p.requires_referral ? 'referral required' : 'everyone'}</p>
+      <p class="muted xs">${fmtD(p.starts_at)} → ${p.ends_at ? fmtD(p.ends_at) : 'no end'} · ${p.referrals} referral(s) · paid ${naira(p.rewards_paid_kobo)}</p></div>`).join('') : '<div class="empty">No promotions yet.</div>'}</div>
+    <h3>Referral activity</h3>
+    <div class="rows">${refs.length ? refs.map(r => `<div><span class="grow"><b>@${esc(r.referrer)}</b> invited <b>@${esc(r.referred)}</b><br><span class="muted xs">code ${esc(r.code)} · ${fmtDT(r.created_at)}${r.promo ? ' · ' + esc(r.promo) : ''}</span></span>${r.status === 'REWARDED' ? P('good', 'Rewarded ' + naira(r.reward_referrer_kobo + r.reward_referee_kobo)) : P('warn', 'Waiting for first purchase')}</div>`).join('') : '<div><span class="muted">No referrals yet.</span></div>'}</div>`;
+  },
+
+  async credits(){
+    return `<div class="ptitle"><h1>Wallet credits</h1></div>
+    <p class="tip">Every credit adds a ledger row (type “admin credit”), records the reason and your name, notifies the user and is written to the audit log. Between ₦100 and ₦500,000 each.</p>
+    <form class="card form" id="f-credit1" novalidate><h3>Credit one user</h3>
+      <div class="two"><div class="field"><label for="c1-user">Username</label><input id="c1-user" autocapitalize="none"></div><div class="field"><label for="c1-amt">Amount (₦)</label><input id="c1-amt" inputmode="decimal"></div></div>
+      <div class="field"><label for="c1-why">Reason (required)</label><input id="c1-why"></div>
+      <button class="btn primary" type="submit" data-confirm="Tap again to credit">Credit user</button></form>
+    <form class="card form" id="f-creditN" novalidate><h3>Credit several users</h3>
+      <div class="field"><label for="cn-users">Usernames (comma or new line, up to 200)</label><textarea id="cn-users"></textarea></div>
+      <div class="two"><div class="field"><label for="cn-amt">Amount each (₦)</label><input id="cn-amt" inputmode="decimal"></div><div class="field"><label for="cn-why">Reason (required)</label><input id="cn-why"></div></div>
+      <button class="btn primary" type="submit" data-confirm="Tap again to credit them">Credit these users</button></form>
+    <form class="card form" id="f-creditAll" novalidate><h3>Credit everyone</h3>
+      <p class="tip warn">Credits every active user. Up to ₦50,000 each and ₦5,000,000 in total.</p>
+      <div class="two"><div class="field"><label for="ca-amt">Amount each (₦)</label><input id="ca-amt" inputmode="decimal"></div><div class="field"><label for="ca-why">Reason (required)</label><input id="ca-why"></div></div>
+      <div class="field"><label for="ca-confirm">Type CREDIT ALL to confirm</label><input id="ca-confirm" autocapitalize="characters"></div>
+      <button class="btn danger" type="submit" data-confirm="Tap again: credit everyone">Credit everyone</button></form>`;
+  },
+
   async audit(){
     const list = await API.rpc('admin_audit_logs');
     const changed = a => { if (!a.old_data || !a.new_data) return ''; const keys = Object.keys(a.new_data).filter(k => JSON.stringify(a.old_data[k]) !== JSON.stringify(a.new_data[k]) && !['updated_at'].includes(k));
@@ -421,32 +516,127 @@ const PAGE = {
   }
 };
 
+/* ---------- helpers for new pages ---------- */
+function txnView(r){
+  if (!r.found) return `<div class="empty">Nothing found for “${esc(r.ref)}”. Check the ID and try again.</div>`;
+  const o = r.order, u = r.user, pay = r.payment, w = r.withdrawal;
+  return `<div class="card"><div class="row between"><h3>${esc(r.kind.toLowerCase())} · ${esc(r.ref)}</h3>${o ? pill(MST, o.status) : pay ? pill(PST, pay.status) : w ? pill(WST, w.status) : ''}</div>
+    ${u ? `<div class="kv"><div><span>User</span><b class="tap" data-act="userid" data-id="${u.id}" style="cursor:pointer;color:var(--brand-strong)">@${esc(u.username)} · ${esc(u.full_name)}</b></div><div><span>Email · phone</span><b>${esc(u.email)} · ${esc(u.phone || '—')}</b></div>
+      <div><span>Balances now</span><b class="num">wallet ${naira(u.wallet_kobo)} · earnings ${naira(u.earnings_kobo)} · pending ${naira(u.pending_kobo)}</b></div></div>` : ''}
+    ${o ? `<h3>Order</h3><div class="kv"><div><span>Order ID</span><b>${esc(o.txn_ref || '')}</b></div><div><span>Service</span><b>${esc(o.service)} · ${esc(o.plan)}</b></div><div><span>Buyer → host</span><b>@${esc(o.buyer)} → @${esc(o.host)}</b></div>
+      <div><span>Seat price</span><b class="num">${naira(o.amount_kobo)}</b></div><div><span>Buyer fee</span><b class="num">${naira(o.buyer_fee_kobo)}</b></div><div><span>Total paid</span><b class="num">${naira(o.total_kobo)}</b></div>
+      <div><span>Platform fee (10%)</span><b class="num">${naira(o.fee_kobo)}</b></div><div><span>Host earning</span><b class="num">${naira(o.host_kobo)} (${esc(o.escrow.toLowerCase())}, releases ${fmtD(o.release_at)})</b></div>
+      <div><span>Refunded</span><b class="num">${naira(o.refund_kobo)}</b></div><div><span>Created</span><b>${fmtDT(o.created_at)}</b></div><div><span>Order status</span><b>${esc(o.order_status.toLowerCase())}${o.completed_at ? ' · ' + fmtDT(o.completed_at) : ''}</b></div>
+      <div><span>Chat messages</span><b>${r.chat_messages || 0} <button class="link" data-act="achat" data-id="${o.id}">open chat</button></b></div></div>` : ''}
+    ${pay ? `<h3>Payment</h3><div class="kv"><div><span>Reference</span><b>${esc(pay.reference)}</b></div><div><span>Amount · paid</span><b class="num">${naira(pay.amount_kobo)} · ${pay.paid_kobo != null ? naira(pay.paid_kobo) : '—'}</b></div><div><span>Status · channel</span><b>${esc(pay.status.toLowerCase())} · ${esc(pay.channel || '—')}</b></div><div><span>Created · verified</span><b>${fmtDT(pay.created_at)} · ${fmtDT(pay.verified_at)}</b></div>${pay.note ? `<div><span>Note</span><b>${esc(pay.note)}</b></div>` : ''}</div>` : ''}
+    ${w ? `<h3>Withdrawal</h3><div class="kv"><div><span>Requested</span><b class="num">${naira(w.amount_kobo)}</b></div><div><span>Fee</span><b class="num">${naira(w.fee_kobo)}</b></div><div><span>Payout</span><b class="num">${naira(w.payout_kobo ?? w.amount_kobo)}</b></div><div><span>Bank</span><b>${esc(w.bank_name)} · ${esc(w.account_number)} · ${esc(w.account_name)}</b></div><div><span>Status</span><b>${esc(w.status.toLowerCase())}</b></div><div><span>Requested · paid</span><b>${fmtDT(w.created_at)} · ${fmtDT(w.paid_at)}</b></div>${w.admin_note ? `<div><span>Admin note</span><b>${esc(w.admin_note)}</b></div>` : ''}</div>` : ''}
+    ${(r.disputes || []).length ? `<h3>Reports</h3><div class="rows">${r.disputes.map(d => `<div><span class="grow sm">${esc(d.reason)} · raised by ${esc((d.raised_by_role || '').toLowerCase())}<br><span class="muted xs">${fmtDT(d.created_at)}${d.resolution ? ' · ' + esc(d.resolution) : ''}</span></span>${pill(DST, d.status)}</div>`).join('')}</div>` : ''}
+    <h3>Wallet movements</h3><div class="rows">${r.ledger.length ? r.ledger.map(t => `<div><span class="grow sm"><b>${esc(t.type.replace(/_/g, ' ').toLowerCase())}</b> · @${esc(t.user || 'SubSplit')} · ${esc(t.account.toLowerCase())}<br><span class="muted xs">${esc(t.description)} · ${esc(t.reference)} · ${fmtDT(t.created_at)}</span></span><span class="amt num ${t.amount_kobo > 0 ? 'in' : 'out'}">${t.amount_kobo > 0 ? '+' : '−'}${naira(Math.abs(t.amount_kobo))}</span></div>`).join('') : '<div><span class="muted">No wallet movements.</span></div>'}</div>
+    ${r.receipt ? `<h3>Receipt</h3><div class="kv"><div><span>Receipt for</span><b>${esc(r.receipt.txn_id)} · ${esc(r.receipt.kind.toLowerCase())}</b></div><div><span>Total</span><b class="num">${naira(r.receipt.total_kobo)}</b></div><div><span>Method · status</span><b>${esc(r.receipt.method)} · ${esc(r.receipt.status)}</b></div></div>` : ''}
+    <h3>Admin actions & audit</h3><div class="rows">${r.audit.length ? r.audit.map(a => `<div><span class="grow sm"><b>${esc(a.action.replace(/_/g, ' ').toLowerCase())}</b> by @${esc(a.admin || 'system')}<br><span class="muted xs">${esc(a.note || '')} · ${fmtDT(a.created_at)}</span></span></div>`).join('') : '<div><span class="muted">No admin actions recorded.</span></div>'}</div></div>`;
+}
+async function findTx(ref){ try { cache.search = await API.rpc('admin_txn_search', {p_ref:ref}); filter.sq = ref; closeSheet(); await show('search', true); } catch(e){ toast(e.message); } }
+function achatMsg(m){
+  const cls = m.role === 'SYSTEM' ? 'user' : m.role === 'ADMIN' ? 'admin' : 'user';
+  return `<div class="msg ${cls}" ${m.role === 'SYSTEM' ? 'style="opacity:.75;font-style:italic"' : ''}><b class="sm">${m.role === 'SYSTEM' ? 'SubSplit' : m.role === 'ADMIN' ? 'Support' : '@' + esc(m.sender) + ' (' + m.role.toLowerCase() + ')'}</b><br>${esc(m.body)}<br><span class="muted xs">${fmtDT(m.created_at)}</span></div>`;
+}
+async function chatSheet(mid){
+  let c; try { c = await API.rpc('admin_order_chat', {p_membership:mid}); } catch(e){ toast(e.message); return; }
+  const o = c.order;
+  openSheet(`${esc(o.service)} · ${esc(o.txn_ref || '')}`, `
+    <div class="kv"><div><span>Buyer → host</span><b>@${esc(o.buyer)} → @${esc(o.host)}</b></div><div><span>Status</span><b>${esc(o.order_status.toLowerCase())}${o.dispute ? ' · report ' + esc(o.dispute.status.toLowerCase()) : ''}</b></div><div><span>Access sent to</span><b>${esc(o.contact || '—')} (${esc(o.access_status.toLowerCase())})</b></div></div>
+    <div style="display:grid;gap:8px;max-height:44vh;overflow:auto" id="achat-box">${c.messages.map(achatMsg).join('') || '<p class="muted sm">No messages yet.</p>'}</div>
+    <form class="form" id="f-achat" data-id="${mid}" novalidate><div class="field"><label for="ac-body">Message to buyer and host</label><textarea id="ac-body" maxlength="2000"></textarea></div><button class="btn primary" type="submit">Send as support</button></form>
+    <div class="wrap-row"><button class="btn sm soft" data-act="findtx" data-v="${esc(o.txn_ref || '')}">Full transaction view</button>${o.dispute ? `<button class="btn sm line" data-act="go" data-v="disputes">Go to disputes</button>` : ''}</div>`);
+  const b = $('#achat-box'); if (b) b.scrollTop = b.scrollHeight;
+}
+async function proofSheet(id){
+  const h = cache.proofs.find(x => x.id === id); if (!h) return;
+  openSheet(`${esc(h.service)} · ${esc(h.plan)}`, `
+    <div class="kv"><div><span>Host</span><b>@${esc(h.host)} · ${esc(h.host_name)}${h.host_verified ? ' ✓' : ''}</b></div><div><span>Contact</span><b>${esc(h.host_email)} · ${esc(h.host_phone || '—')}</b></div>
+      <div><span>Submitted</span><b>${fmtDT(h.submitted_at)}</b></div><div><span>Listing</span><b>${esc(h.listing_status.toLowerCase())}</b></div>
+      <div><span>30-day escrow agreement</span><b>${h.agreement_at ? 'Accepted ' + fmtDT(h.agreement_at) : 'Not accepted'}</b></div><div><span>Proof status</span><b>${esc(h.status.toLowerCase())}</b></div></div>
+    ${h.file_path ? `<button class="btn soft" data-act="proof" data-v="${esc(h.file_path)}">View proof file</button>` : ''}
+    ${h.note ? `<p class="secret">Host says: ${esc(h.note)}</p>` : ''}${h.reason ? `<p class="tip">Decision reason: ${esc(h.reason)}</p>` : ''}
+    <button class="btn line" data-act="listing" data-id="${h.listing_id}">Open the listing</button>
+    ${h.status === 'PENDING' ? `<div class="field"><label for="pf-note">Reason (shown to the host if you reject)</label><textarea id="pf-note"></textarea></div>
+      <div class="wrap-row"><button class="btn good" data-act="pdecide" data-id="${h.id}" data-v="APPROVE" data-confirm="Tap again to approve">Approve</button><button class="btn danger" data-act="pdecide" data-id="${h.id}" data-v="REJECT" data-confirm="Tap again to reject">Reject</button></div>` : ''}`);
+}
+function reqSheet(id){
+  const r = cache.requests.find(x => x.id === id); if (!r) return;
+  openSheet(esc(r.service_name), `<div class="kv"><div><span>Requested by</span><b>@${esc(r.user)} · ${esc(r.email)}</b></div><div><span>Date</span><b>${fmtDT(r.created_at)}</b></div><div><span>People who asked</span><b>${r.same_requests}</b></div><div><span>Status</span><b>${esc(r.status.toLowerCase())}</b></div></div>
+    ${r.details ? `<p class="secret">${esc(r.details)}</p>` : ''}${r.admin_note ? `<p class="tip">Note: ${esc(r.admin_note)}</p>` : ''}
+    ${r.status === 'PENDING' || r.status === 'IN_PROGRESS' ? `<div class="field"><label for="rq-note">Note to the user (required to decline)</label><textarea id="rq-note"></textarea></div>
+      <div class="wrap-row">${r.status === 'PENDING' ? `<button class="btn soft" data-act="rqdo" data-id="${r.id}" data-v="PROGRESS">We're working on it</button>` : ''}
+      <button class="btn good" data-act="rqdo" data-id="${r.id}" data-v="ADDED" data-confirm="Tap again: it is added">Mark as added</button>
+      <button class="btn danger" data-act="rqdo" data-id="${r.id}" data-v="DECLINE" data-confirm="Tap again to decline">Decline</button></div>
+      <button class="btn line" data-act="svc">Add the service now</button>` : ''}`);
+}
+function promoSheet(id){
+  const p = id ? cache.promos.find(x => x.id === id) : {title:'', banner_url:'', description:'', terms:'', reward_referrer_kobo:0, reward_referee_kobo:0, min_purchase_kobo:0, requires_referral:true, starts_at:new Date().toISOString(), ends_at:null, active:true};
+  const dt = t => t ? new Date(new Date(t).getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16) : '';
+  openSheet(id ? 'Edit promotion' : 'New promotion', `<form class="form" id="f-promo" data-id="${id || ''}" novalidate>
+    <div class="field"><label for="pr-title">Promo title</label><input id="pr-title" maxlength="80" value="${esc(p.title)}"></div>
+    <div class="field"><label for="pr-banner">Banner image link (https://…)</label><input id="pr-banner" value="${esc(p.banner_url)}"></div>
+    <div class="field"><label for="pr-desc">Description</label><textarea id="pr-desc">${esc(p.description)}</textarea></div>
+    <div class="field"><label for="pr-terms">Terms</label><textarea id="pr-terms">${esc(p.terms)}</textarea></div>
+    <div class="two"><div class="field"><label for="pr-ref">Reward for the inviter (₦)</label><input id="pr-ref" inputmode="decimal" value="${nairaInput(p.reward_referrer_kobo)}"></div>
+    <div class="field"><label for="pr-fr">Reward for the new user (₦)</label><input id="pr-fr" inputmode="decimal" value="${nairaInput(p.reward_referee_kobo)}"></div>
+    <div class="field"><label for="pr-min">Minimum purchase (₦)</label><input id="pr-min" inputmode="decimal" value="${nairaInput(p.min_purchase_kobo)}"></div></div>
+    <div class="two"><div class="field"><label for="pr-start">Starts</label><input id="pr-start" type="datetime-local" value="${dt(p.starts_at)}"></div><div class="field"><label for="pr-end">Ends (empty = no end)</label><input id="pr-end" type="datetime-local" value="${dt(p.ends_at)}"></div></div>
+    <label class="check"><input type="checkbox" id="pr-req" ${p.requires_referral ? 'checked' : ''}> Only for referred users (invite code needed)</label>
+    <label class="check"><input type="checkbox" id="pr-active" ${p.active ? 'checked' : ''}> Promotion is on</label>
+    <button class="btn primary" type="submit">Save promotion</button></form>`);
+}
+async function idsFor(names){
+  const out = [];
+  for (const n of names){
+    const list = await API.rpc('admin_users', {p_search:n});
+    const hit = list.find(u => u.username.toLowerCase() === n.toLowerCase());
+    if (!hit) throw new Error(`No user with username “${n}”.`);
+    out.push(hit.id);
+  }
+  return out;
+}
+
 /* ---------- detail sheets ---------- */
 async function userSheet(id){
-  const u = cache.users.find(x => x.id === id); if (!u) return;
-  let d = {transactions:[], listings:[], memberships:[]};
-  try { d = await API.rpc('admin_user_detail', {p_id:id}); } catch(e){ toast(e.message); }
-  const self = id === ME.id;
+  let d;
+  try { d = await API.rpc('admin_user_full', {p_id:id}); } catch(e){ toast(e.message); return; }
+  const u = d.profile, b = d.balances, self = id === ME.id;
   openSheet(esc(u.full_name || u.email), `
     <div class="kv"><div><span>Username</span><b>@${esc(u.username)}</b></div><div><span>Email</span><b>${esc(u.email)}</b></div><div><span>Phone</span><b>${esc(u.phone || '—')}</b></div>
-      <div><span>Joined</span><b>${fmtD(u.created_at)}</b></div><div><span>Wallet</span><b class="num">${naira(u.wallet_kobo)}</b></div><div><span>Earnings available</span><b class="num">${naira(u.earnings_kobo)}</b></div><div><span>Earnings pending</span><b class="num">${naira(u.pending_kobo)}</b></div></div>
+      <div><span>Joined · last activity</span><b>${fmtD(u.created_at)} · ${fmtDT(d.last_activity)}</b></div><div><span>Referral code</span><b>${esc(u.referral_code || '—')}${u.referred_by ? ' · invited by @' + esc(u.referred_by) : ''}</b></div>
+      <div><span>Available (wallet + earnings)</span><b class="num">${naira(b.available_kobo)}</b></div><div><span>Wallet · earnings</span><b class="num">${naira(b.wallet_kobo)} · ${naira(b.earnings_kobo)}</b></div><div><span>Pending (escrow)</span><b class="num">${naira(b.pending_kobo)}</b></div>
+      <div><span>Referrals</span><b>${d.referrals.invited} invited · ${naira(d.referrals.earned_kobo)} earned</b></div></div>
     <form class="card form" id="f-user" data-id="${id}" novalidate><h3>Account</h3>
       <div class="field"><label for="u-status">Status</label><select id="u-status" ${self ? 'disabled' : ''}><option value="ACTIVE" ${u.status === 'ACTIVE' ? 'selected' : ''}>Active</option><option value="SUSPENDED" ${u.status === 'SUSPENDED' ? 'selected' : ''}>Suspended (also suspends their live listings)</option></select></div>
       <label class="check"><input type="checkbox" id="u-ver" ${u.verified_host ? 'checked' : ''}> Verified host (badge on their listings)</label>
       <label class="check"><input type="checkbox" id="u-admin" ${u.is_admin ? 'checked' : ''} ${self ? 'disabled' : ''}> Admin (full access to this dashboard)</label>
       <div class="field"><label for="u-note">Reason / note (saved in audit log)</label><input id="u-note"></div>
       <button class="btn primary" type="submit">Save</button></form>
+    <form class="card form" id="f-uedit" data-id="${id}" novalidate><h3>Edit profile</h3>
+      <div class="two"><div class="field"><label for="ue-name">Full name</label><input id="ue-name" value="${esc(u.full_name)}"></div><div class="field"><label for="ue-phone">Phone</label><input id="ue-phone" value="${esc(u.phone)}"></div></div>
+      <button class="btn soft" type="submit">Save profile</button></form>
     <form class="card form" id="f-adjust" data-id="${id}" novalidate><h3>Adjust balance</h3>
-      <p class="tip">Use only to correct mistakes. Adds a ledger row, notifies the user and is recorded in the audit log.</p>
+      <p class="tip">Use only to correct mistakes. Adds a ledger row, notifies the user and is recorded in the audit log. To give free credit use Wallet credits.</p>
       <div class="two"><div class="field"><label for="aj-kind">Balance</label><select id="aj-kind"><option value="WALLET">Wallet</option><option value="EARNINGS">Host earnings</option></select></div>
       <div class="field"><label for="aj-amt">Amount (₦, use − to remove)</label><input id="aj-amt" inputmode="decimal" placeholder="500 or -500"></div></div>
       <div class="field"><label for="aj-note">Reason (required)</label><input id="aj-note"></div>
       <button class="btn soft" type="submit" data-confirm="Tap again to adjust">Apply adjustment</button></form>
-    ${d.listings.length ? `<h3>Listings</h3><div class="rows">${d.listings.map(l => `<div class="tap" data-act="listing" data-id="${l.id}"><span class="grow">${esc(l.service)} · ${esc(l.plan)}<br><span class="muted xs">${l.occupied}/${l.seats} seats</span></span>${pill(LST, l.status)}</div>`).join('')}</div>` : ''}
-    ${d.memberships.length ? `<h3>Seats</h3><div class="rows">${d.memberships.map(m => `<div><span class="grow">${esc(m.service)}<br><span class="muted xs">until ${fmtD(m.ends_at)}</span></span>${pill(MST, m.status)}<span class="amt num">${naira(m.amount_kobo)}</span></div>`).join('')}</div>` : ''}
-    ${d.transactions.length ? `<h3>Recent ledger</h3><div class="rows">${d.transactions.map(t => `<div><span class="grow sm">${esc(t.type.replace(/_/g, ' ').toLowerCase())} · ${esc(t.account.toLowerCase())}<br><span class="muted xs">${esc(t.description)} · ${fmtDT(t.created_at)}</span></span><span class="amt num ${t.amount_kobo > 0 ? 'in' : 'out'}">${t.amount_kobo > 0 ? '+' : '−'}${naira(Math.abs(t.amount_kobo))}</span></div>`).join('')}</div>` : ''}`);
+    ${d.orders.length ? `<h3>Orders</h3><div class="rows">${d.orders.map(o => `<div class="tap" data-act="achat" data-id="${o.id}"><span class="grow">${esc(o.service)} · <span class="muted sm">${esc(o.as.toLowerCase())}</span><br><span class="muted xs">${esc(o.txn_ref || '')} · until ${fmtD(o.ends_at)}</span></span>${pill(MST, o.status)}<span class="amt num">${naira(o.total_kobo)}</span></div>`).join('')}</div>` : ''}
+    ${d.listings.length ? `<h3>Listings</h3><div class="rows">${d.listings.map(l => `<div class="tap" data-act="listing" data-id="${l.id}"><span class="grow">${esc(l.service)} · ${esc(l.plan)}<br><span class="muted xs">${l.occupied}/${l.seats} seats${l.proof_status && l.proof_status !== 'NONE' ? ' · proof ' + esc(l.proof_status.toLowerCase()) : ''}</span></span>${pill(LST, l.status)}</div>`).join('')}</div>` : ''}
+    ${d.disputes.length ? `<h3>Reports</h3><div class="rows">${d.disputes.map(x => `<div><span class="grow sm">${esc(x.reason)} · raised by ${esc((x.raised_by_role || '').toLowerCase())}<br><span class="muted xs">${fmtDT(x.created_at)}</span></span>${pill(DST, x.status)}</div>`).join('')}</div>` : ''}
+    ${d.payments.length ? `<h3>Payments</h3><div class="rows">${d.payments.map(x => `<div class="tap" data-act="findtx" data-v="${esc(x.reference)}"><span class="grow sm">${esc(x.purpose === 'SEAT' ? 'Seat' : 'Deposit')} · ${esc(x.reference)}<br><span class="muted xs">${fmtDT(x.created_at)}</span></span>${pill(PST, x.status)}<span class="amt num">${naira(x.amount_kobo)}</span></div>`).join('')}</div>` : ''}
+    ${d.withdrawals.length ? `<h3>Withdrawals</h3><div class="rows">${d.withdrawals.map(x => `<div class="tap" data-act="findtx" data-v="${esc(x.reference)}"><span class="grow sm">${esc(x.reference)}<br><span class="muted xs">${fmtDT(x.created_at)} · fee ${naira(x.fee_kobo)}</span></span>${pill(WST, x.status)}<span class="amt num">${naira(x.amount_kobo)}</span></div>`).join('')}</div>` : ''}
+    ${d.ledger.length ? `<h3>Ledger</h3><div class="rows">${d.ledger.map(t => `<div class="tap" data-act="findtx" data-v="${esc(t.reference)}"><span class="grow sm">${esc(t.type.replace(/_/g, ' ').toLowerCase())} · ${esc(t.account.toLowerCase())}<br><span class="muted xs">${esc(t.description)} · ${esc(t.reference)} · ${fmtDT(t.created_at)}</span></span><span class="amt num ${t.amount_kobo > 0 ? 'in' : 'out'}">${t.amount_kobo > 0 ? '+' : '−'}${naira(Math.abs(t.amount_kobo))}</span></div>`).join('')}</div>` : ''}
+    ${d.audit.length ? `<h3>Admin actions on this user</h3><div class="rows">${d.audit.map(a => `<div><span class="grow sm"><b>${esc(a.action.replace(/_/g, ' ').toLowerCase())}</b> by @${esc(a.admin || 'system')}<br><span class="muted xs">${esc(a.note || '')} · ${fmtDT(a.created_at)}</span></span></div>`).join('')}</div>` : ''}
+    ${self ? '' : `<form class="card form" id="f-udel" data-id="${id}" novalidate><h3>Delete account</h3><p class="tip warn">Only possible when the account has no money or order history (the ledger must stay complete). Otherwise suspend it above.</p>
+      <div class="field"><label for="ud-name">Type the username (${esc(u.username)}) to confirm</label><input id="ud-name" autocapitalize="none"></div>
+      <button class="btn danger" type="submit" data-confirm="Tap again to delete">Delete account</button></form>`}`);
 }
 function serviceSheet(id){
+  cache.services = cache.services || [];
   const s = id ? cache.services.find(x => x.id === id) : {name:'', category:(SETTINGS.categories || [])[0] || 'Other', logo_color:'#5B5BD6', logo_url:'', description:'', sharing_rules:'', notes:'', active:true, sort:(cache.services || []).length + 1};
   const cats = [...new Set([...(SETTINGS.categories || []), s.category])];
   openSheet(id ? 'Edit service' : 'Add service', `<form class="form" id="f-svc" data-id="${id || ''}" novalidate>
@@ -500,7 +690,9 @@ async function listingSheet(id){
     <div class="kv"><div><span>Normal price (platform)</span><b class="num">${naira(l.normal_kobo)}</b></div><div><span>Host markup</span><b>${l.markup_pct}%</b></div>
       <div><span>Seat price</span><b class="num">${naira(l.seat_kobo)}</b></div><div><span>Seats</span><b>${l.seats_occupied} taken of ${l.seats_total}</b></div>
       <div><span>Access</span><b>${ACCESS[l.access_type]}</b></div><div><span>Submitted</span><b>${fmtDT(l.submitted_at)}</b></div></div>
-    <h3>Proof</h3>${l.proof_path ? `<button class="btn soft" data-act="proof" data-v="${esc(l.proof_path)}">View uploaded proof</button>` : '<p class="muted sm">No proof uploaded.</p>'}
+    <h3>Proof of purchase ${l.proof_status && l.proof_status !== 'NONE' ? pill(XST, l.proof_status) : ''}</h3>
+    ${(l.proofs || []).length ? `<div class="rows">${l.proofs.map(h => `<div><span class="grow sm">${fmtDT(h.submitted_at)}${h.reason ? '<br><span class="muted xs">' + esc(h.reason) + '</span>' : ''}</span>${pill(XST, h.status)}<button class="btn sm soft" data-act="proof" data-v="${esc(h.file_path)}">View</button></div>`).join('')}</div>` : '<p class="muted sm">No proof uploaded. The listing cannot go live if this plan requires proof.</p>'}
+    <p class="tip ${l.agreement_at ? 'good' : 'warn'}">${l.agreement_at ? 'Host accepted the 30-day escrow agreement on ' + fmtDT(l.agreement_at) + '.' : 'Host has not accepted the 30-day escrow agreement.'}</p>
     ${l.proof_note ? `<p class="secret">Host says: ${esc(l.proof_note)}</p>` : ''}
     <h3>Access details (private)</h3><p class="secret">${esc(l.access_details) || '—'}</p>
     ${l.note ? `<p class="tip">Listing note: ${esc(l.note)}</p>` : ''}${l.review_note ? `<p class="tip">Last review note: ${esc(l.review_note)}</p>` : ''}
@@ -513,9 +705,10 @@ function membershipSheet(id){
   const held = m.escrow === 'HELD';
   openSheet(`${esc(m.service)} seat`, `
     <div class="kv"><div><span>Member</span><b>@${esc(m.buyer)}</b></div><div><span>Host</span><b>@${esc(m.host)}</b></div><div><span>Access sent to</span><b>${esc(m.contact || '—')} (${esc(m.access_status.toLowerCase())})</b></div>
-      <div><span>Period</span><b>${fmtD(m.starts_at)} – ${fmtD(m.ends_at)}</b></div><div><span>Paid</span><b class="num">${naira(m.amount_kobo)}</b></div>
+      <div><span>Period</span><b>${fmtD(m.starts_at)} – ${fmtD(m.ends_at)}</b></div><div><span>Order ID</span><b>${esc(m.txn_ref || '')} <button class="link" data-act="copy" data-v="${esc(m.txn_ref || '')}">copy</button></b></div><div><span>Seat price</span><b class="num">${naira(m.amount_kobo)}</b></div><div><span>Buyer fee</span><b class="num">${naira(m.buyer_fee_kobo)}</b></div><div><span>Escrow releases</span><b>${fmtD(m.release_at)}</b></div>
       <div><span>Platform fee (10%)</span><b class="num">${naira(m.fee_kobo)}</b></div><div><span>Host share</span><b class="num">${naira(m.host_kobo)}</b></div>
       <div><span>Money</span><b>${esc(m.escrow.toLowerCase())}${m.refund_kobo ? ' · refunded ' + naira(m.refund_kobo) : ''}</b></div></div>
+    <div class="wrap-row"><button class="btn sm soft" data-act="achat" data-id="${m.id}">${ic('chat')} Order chat</button><button class="btn sm line" data-act="findtx" data-v="${esc(m.txn_ref || '')}">Full transaction view</button></div>
     ${held ? `<div class="field"><label for="ms-note">Reason (required for refunds)</label><input id="ms-note"></div>
       <div class="row"><input id="ms-amt" inputmode="decimal" placeholder="Partial refund ₦" style="max-width:180px"><button class="btn soft sm" data-act="mrefund" data-id="${m.id}" data-v="part" data-confirm="Tap again to refund part">Partial refund</button></div>
       <div class="wrap-row"><button class="btn danger" data-act="mrefund" data-id="${m.id}" data-v="full" data-confirm="Tap again: full refund">Full refund</button>
@@ -552,6 +745,15 @@ document.addEventListener('click', async e => {
     case 'filter': filter[el.dataset.k] = v; show(page, true); break;
     case 'copy': copyText(v); break;
     case 'user': userSheet(id); break;
+    case 'userid': closeSheet(); userSheet(id); break;
+    case 'achat': chatSheet(id); break;
+    case 'findtx': findTx(v); break;
+    case 'proofsheet': proofSheet(id); break;
+    case 'reqsheet': reqSheet(id); break;
+    case 'promo': promoSheet(id); break;
+    case 'preject': run(el, () => API.rpc('admin_payment_reject', {p_reference:v, p_note:($('#pn-' + v) || {}).value || ''}), 'Payment rejected.'); break;
+    case 'pdecide': run(el, () => API.rpc('admin_proof_action', {p_id:id, p_action:v, p_reason:($('#pf-note') || {}).value || ''}), v === 'APPROVE' ? 'Proof approved.' : 'Proof rejected. The host was told why.'); break;
+    case 'rqdo': run(el, () => API.rpc('admin_request_action', {p_id:id, p_action:v, p_note:($('#rq-note') || {}).value || ''}), 'Request updated.'); break;
     case 'svc': serviceSheet(id); break;
     case 'plan': planSheet(id, el.dataset.s); break;
     case 'listing': listingSheet(id); break;
@@ -580,6 +782,28 @@ document.addEventListener('submit', async e => {
       try { await API.signIn(val('l-email').trim(), val('l-pass')); await boot(); }
       catch(err){ loginScreen(err.message); }
       break; }
+    case 'f-search': { const q = val('sq').trim(); if (q.length < 3){ toast('Type the ID first.'); break; } findTx(q); break; }
+    case 'f-csearch': filter.cq = val('cq'); show('chats', true); break;
+    case 'f-achat': {
+      const mid = f.dataset.id, body = val('ac-body').trim(); if (!body){ toast('Write a message first.'); break; }
+      try { await API.rpc('admin_order_send', {p_membership:mid, p_body:body}); toast('Sent.'); chatSheet(mid); } catch(err){ toast(err.message); }
+      break; }
+    case 'f-promo': run(btn, () => API.rpc('admin_save_promo', {p:{id:f.dataset.id || null, title:val('pr-title'), banner_url:val('pr-banner').trim(), description:val('pr-desc'), terms:val('pr-terms'),
+      reward_referrer_kobo:toKobo(val('pr-ref')), reward_referee_kobo:toKobo(val('pr-fr')), min_purchase_kobo:toKobo(val('pr-min')),
+      starts_at:val('pr-start') ? new Date(val('pr-start')).toISOString() : null, ends_at:val('pr-end') ? new Date(val('pr-end')).toISOString() : null,
+      requires_referral:chk('pr-req'), active:chk('pr-active')}}), 'Promotion saved.'); break;
+    case 'f-uedit': run(btn, () => API.rpc('admin_edit_user', {p_id:f.dataset.id, p_full_name:val('ue-name'), p_phone:val('ue-phone'), p_note:'Edited in admin'}), 'Profile saved.'); break;
+    case 'f-udel': run(btn, () => API.rpc('admin_delete_user', {p_id:f.dataset.id, p_confirm:val('ud-name').trim()}), 'Account deleted.'); break;
+    case 'f-credit1': {
+      if (!btn.dataset.armed){ btn.dataset.armed = '1'; const o = btn.innerHTML; btn.textContent = btn.dataset.confirm; setTimeout(() => { if (btn.isConnected){ delete btn.dataset.armed; btn.innerHTML = o; } }, 3500); break; }
+      run(btn, async () => { const [uid] = await idsFor([val('c1-user').trim()]); await API.rpc('admin_credit_user', {p_user:uid, p_amount_kobo:toKobo(val('c1-amt')), p_reason:val('c1-why')}); }, 'Credit sent.'); break; }
+    case 'f-creditN': {
+      if (!btn.dataset.armed){ btn.dataset.armed = '1'; const o = btn.innerHTML; btn.textContent = btn.dataset.confirm; setTimeout(() => { if (btn.isConnected){ delete btn.dataset.armed; btn.innerHTML = o; } }, 3500); break; }
+      run(btn, async () => { const names = [...new Set(val('cn-users').split(/[\s,]+/).map(x => x.trim()).filter(Boolean))]; const ids = await idsFor(names);
+        const r = await API.rpc('admin_credit_batch', {p_users:ids, p_amount_kobo:toKobo(val('cn-amt')), p_reason:val('cn-why')}); toast(`Credited ${r.users} user(s), ${naira(r.total_kobo)} in total.`); }, 'Credits sent.'); break; }
+    case 'f-creditAll': {
+      if (!btn.dataset.armed){ btn.dataset.armed = '1'; const o = btn.innerHTML; btn.textContent = btn.dataset.confirm; setTimeout(() => { if (btn.isConnected){ delete btn.dataset.armed; btn.innerHTML = o; } }, 3500); break; }
+      run(btn, async () => { const r = await API.rpc('admin_credit_all', {p_amount_kobo:toKobo(val('ca-amt')), p_reason:val('ca-why'), p_confirm:val('ca-confirm').trim()}); toast(`Credited ${r.users} user(s), ${naira(r.total_kobo)} in total.`); }, 'Everyone was credited.'); break; }
     case 'f-usearch': filter.q = val('u-q'); show('users', true); break;
     case 'f-user': run(btn, () => API.rpc('admin_update_user', {p_id:f.dataset.id, p_status:val('u-status'), p_verified:chk('u-ver'), p_is_admin:chk('u-admin'), p_note:val('u-note')}), 'User updated.'); break;
     case 'f-adjust': {
@@ -593,7 +817,7 @@ document.addEventListener('submit', async e => {
       customer_instructions:val('pl-cust'), host_instructions:val('pl-host'), notes:val('pl-notes'), sort:+val('pl-sort') || 0}}), 'Plan saved. Listings now use these rules.'); break;
     case 'f-treply': run(btn, () => API.rpc('admin_reply_ticket', {p_id:f.dataset.id, p_body:val('tr-body'), p_close:false}), 'Reply sent.'); break;
     case 'f-settings': run(btn, () => API.rpc('admin_save_settings', {p:{site_name:val('st-name'), hero_title:val('st-title'), hero_text:val('st-text'), notice:val('st-notice'),
-      categories:val('st-cats').split(',').map(c => c.trim()).filter(Boolean), support_whatsapp:val('st-wa'), support_email:val('st-email').trim(),
+      categories:val('st-cats').split(',').map(c => c.trim()).filter(Boolean), support_whatsapp:val('st-wa'), support_whatsapp_link:val('st-walink').trim(), support_email:val('st-email').trim(),
       min_withdrawal_kobo:toKobo(val('st-minw')), min_topup_kobo:toKobo(val('st-mint')), max_topup_kobo:toKobo(val('st-maxt')),
       renewal_window_days:+val('st-renew'), reminder_days:+val('st-remind'), auto_approve_listings:chk('st-auto')}}), 'Settings saved.'); break;
     case 'f-broadcast': {

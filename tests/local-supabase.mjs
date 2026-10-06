@@ -1,0 +1,199 @@
+// =====================================================================
+// LOCAL TEST SERVER (not for production). Imitates the parts of Supabase
+// the apps use — Auth, /rest/v1/rpc (real Postgres + real roles/RLS),
+// Storage, and Edge Functions (runs the REAL backend/functions/*.ts code) —
+// plus a fake Paystack checkout. Lets us test both apps end to end.
+//   node tests/local-supabase.mjs   (needs a local Postgres, see README)
+// =====================================================================
+import http from 'node:http';
+import { execFile } from 'node:child_process';
+import fs from 'node:fs';
+import path from 'node:path';
+import crypto from 'node:crypto';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const PORT = +(process.env.PORT || 8787), BASE = `http://localhost:${PORT}`;
+const PGHOST = process.env.PGHOST, PGPORT = process.env.PGPORT || '5432', PGDB = process.env.PGDATABASE || 'e2e';
+const SERVICE_KEY = 'service-role-local', PUBLISHABLE = 'publishable-local', PAYSTACK_SECRET = 'sk_test_local';
+
+// ---------- Postgres ----------
+function psql(sql) {
+  return new Promise(res => execFile('psql', ['-h', PGHOST, '-p', PGPORT, '-U', 'postgres', '-d', PGDB, '-X', '-q', '-t', '-A',
+    '-v', 'ON_ERROR_STOP=1', '-v', 'VERBOSITY=verbose', '-c', sql], { maxBuffer: 64 * 1024 * 1024 },
+    (err, out, errOut) => res({ ok: !err, out: (out || '').trim(), err: (errOut || '').trim() })));
+}
+const q = v => v === null || v === undefined ? 'NULL' : "'" + String(typeof v === 'object' ? JSON.stringify(v) : v).replace(/'/g, "''") + "'";
+const retTypes = {};
+async function retType(fn) {
+  if (!retTypes[fn] || retTypes[fn] === 'missing') { const r = await psql(`select prorettype::regtype from pg_proc where proname = ${q(fn)} and pronamespace = 'public'::regnamespace limit 1`); retTypes[fn] = r.out || 'missing'; }
+  return retTypes[fn];
+}
+function pgError(errText) {
+  const line = errText.split('\n').find(l => l.startsWith('ERROR:')) || errText;
+  const m = line.match(/^ERROR:\s+([0-9A-Z]{5}):\s+(.*)$/);
+  return m ? { code: m[1], message: m[2] } : { code: 'XX000', message: line.replace(/^ERROR:\s+/, '') };
+}
+function asRole(role, sub) {
+  return `begin; set local role ${role}; set local "request.jwt.claim.sub" = ${q(sub || '')};`;
+}
+
+// ---------- tiny JWT (unsigned, test only) ----------
+const b64 = o => Buffer.from(JSON.stringify(o)).toString('base64url');
+function makeSession(u) {
+  const exp = Math.floor(Date.now() / 1000) + 3600;
+  return { access_token: `${b64({ alg: 'none' })}.${b64({ sub: u.id, email: u.email, role: 'authenticated', exp })}.x`, token_type: 'bearer',
+           expires_in: 3600, expires_at: exp, refresh_token: 'rt-' + u.id, user: { id: u.id, email: u.email } };
+}
+function whoFromAuth(req) {
+  const h = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
+  if (!h) return { role: 'anon' };
+  if (h === SERVICE_KEY) return { role: 'service_role' };
+  try { const p = JSON.parse(Buffer.from(h.split('.')[1], 'base64url')); if (p.exp > Date.now() / 1000) return { role: 'authenticated', sub: p.sub, email: p.email }; } catch (e) {}
+  return { role: 'invalid' };
+}
+
+// ---------- Edge Functions: load the real code with a Deno shim ----------
+const ENV = { SUPABASE_URL: BASE, SUPABASE_SERVICE_ROLE_KEY: SERVICE_KEY, PAYSTACK_SECRET_KEY: PAYSTACK_SECRET,
+              PAYSTACK_API_BASE: BASE + '/paystack', SITE_URL: BASE + '/' };
+const FUNCS = {};
+globalThis.Deno = { env: { get: k => ENV[k] }, serve: h => { FUNCS.__last = h; } };
+for (const name of ['payments-init', 'payments-verify', 'paystack-webhook']) {
+  await import(pathToFileURL(path.join(ROOT, 'backend/functions', name, 'index.ts')).href);
+  FUNCS[name] = FUNCS.__last;
+}
+
+// ---------- fake Paystack ----------
+const PAYSTACK = {};  // reference -> tx
+const storageFiles = {};
+
+function send(res, status, body, headers = {}) {
+  const isStr = typeof body === 'string' || Buffer.isBuffer(body);
+  res.writeHead(status, { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': '*', 'Access-Control-Allow-Methods': '*',
+                          'Content-Type': isStr ? (headers['Content-Type'] || 'text/html; charset=utf-8') : 'application/json', ...headers });
+  res.end(isStr ? body : JSON.stringify(body));
+}
+const readBody = req => new Promise(r => { const c = []; req.on('data', d => c.push(d)); req.on('end', () => r(Buffer.concat(c))); });
+const STATIC = { '/': 'frontend/index.html', '/index.html': 'frontend/index.html', '/api.js': 'frontend/api.js', '/logo-mark.svg': 'frontend/logo-mark.svg',
+                 '/logo.svg': 'frontend/logo.svg', '/admin/': 'admin/index.html', '/admin/index.html': 'admin/index.html' };
+const MIME = { html: 'text/html; charset=utf-8', js: 'text/javascript', svg: 'image/svg+xml' };
+
+http.createServer(async (req, res) => {
+  const url = new URL(req.url, BASE), p = url.pathname;
+  try {
+    if (req.method === 'OPTIONS') return send(res, 204, '');
+    // static apps
+    if (p === '/config.js') return send(res, 200, `window.SUBSPLIT_CONFIG = { SUPABASE_URL: '${BASE}', SUPABASE_PUBLISHABLE_KEY: '${PUBLISHABLE}' };`, { 'Content-Type': 'text/javascript' });
+    if (p === '/admin') return send(res, 301, '', { Location: '/admin/' });
+    if (STATIC[p] && req.method === 'GET') { const f = STATIC[p]; return send(res, 200, fs.readFileSync(path.join(ROOT, f)), { 'Content-Type': MIME[f.split('.').pop()] }); }
+    if (p.startsWith('/rest/') || p.startsWith('/auth/') || p.startsWith('/storage/') || p.startsWith('/functions/')) {
+      if (req.headers.apikey !== PUBLISHABLE && req.headers.apikey !== SERVICE_KEY && !p.startsWith('/storage/v1/object/sign-local/')) return send(res, 401, { message: 'Invalid API key' });
+    }
+    const body = await readBody(req);
+    const json = () => { try { return JSON.parse(body.toString() || '{}'); } catch (e) { return {}; } };
+
+    // ----- Auth -----
+    if (p === '/auth/v1/signup') {
+      const b = json();
+      if (!b.email || !b.password || b.password.length < 6) return send(res, 422, { msg: 'Password should be at least 6 characters' });
+      const r = await psql(`insert into auth.users (email, raw_user_meta_data, test_password) values (${q(b.email.toLowerCase())}, ${q(b.data || {})}, ${q(b.password)}) returning id`);
+      if (!r.ok) return send(res, 422, { msg: 'User already registered' });
+      return send(res, 200, makeSession({ id: r.out, email: b.email.toLowerCase() }));
+    }
+    if (p === '/auth/v1/token') {
+      const b = json();
+      if (url.searchParams.get('grant_type') === 'refresh_token') {
+        const id = String(b.refresh_token || '').replace(/^rt-/, '');
+        const r = await psql(`select email from auth.users where id = ${q(id)}`);
+        return r.out ? send(res, 200, makeSession({ id, email: r.out })) : send(res, 400, { error_description: 'Invalid Refresh Token' });
+      }
+      const r = await psql(`select id from auth.users where email = ${q(String(b.email || '').toLowerCase())} and test_password = ${q(b.password)}`);
+      return r.out ? send(res, 200, makeSession({ id: r.out, email: b.email.toLowerCase() })) : send(res, 400, { error: 'invalid_grant', error_description: 'Invalid login credentials' });
+    }
+    if (p === '/auth/v1/user') {
+      const w = whoFromAuth(req);
+      if (w.role !== 'authenticated') return send(res, 401, { msg: 'invalid JWT' });
+      if (req.method === 'PUT') { const b = json(); if (b.password) await psql(`update auth.users set test_password = ${q(b.password)} where id = ${q(w.sub)}`); }
+      return send(res, 200, { id: w.sub, email: w.email });
+    }
+    if (p === '/auth/v1/logout') return send(res, 204, '');
+    if (p === '/auth/v1/recover') return send(res, 200, {});
+
+    // ----- Database functions (PostgREST /rpc) -----
+    if (p.startsWith('/rest/v1/rpc/')) {
+      const fn = p.split('/').pop(), w = whoFromAuth(req);
+      if (w.role === 'invalid') return send(res, 401, { code: 'PGRST301', message: 'JWT expired' });
+      if (!/^[a-z_][a-z0-9_]*$/.test(fn)) return send(res, 404, { message: 'Not found' });
+      const rt = await retType(fn);
+      if (rt === 'missing') return send(res, 404, { code: 'PGRST202', message: `Could not find the function public.${fn}` });
+      const args = Object.entries(json()).map(([k, v]) => `${k} => ${q(v)}`).join(', ');
+      const call = `public.${fn}(${args})`;
+      const sql = asRole(w.role, w.sub) + (rt === 'void' ? ` select ${call}; select 'null';` : ` select coalesce(to_json(${call})::text, 'null');`) + ' commit;';
+      const r = await psql(sql);
+      if (!r.ok) { const e = pgError(r.err); return send(res, e.code === '42501' ? (w.role === 'anon' ? 401 : 403) : e.code === '28000' ? 403 : 400, e); }
+      const lines = r.out.split('\n'); return send(res, 200, lines[lines.length - 1] || 'null', { 'Content-Type': 'application/json' });
+    }
+
+    // ----- Storage (policies are the real ones from 002_storage.sql) -----
+    let m;
+    if ((m = p.match(/^\/storage\/v1\/object\/sign\/([^/]+)\/(.+)$/))) {
+      const w = whoFromAuth(req), name = decodeURIComponent(m[2]);
+      const r = await psql(asRole(w.role === 'authenticated' ? 'authenticated' : 'anon', w.sub) + ` select count(*) from storage.objects where bucket_id = ${q(m[1])} and name = ${q(name)}; commit;`);
+      if (!r.ok || r.out.split('\n').pop() !== '1') return send(res, 400, { message: 'Object not found' });
+      return send(res, 200, { signedURL: `/object/sign-local/${m[1]}/${m[2]}?token=t` });
+    }
+    if ((m = p.match(/^\/storage\/v1\/object\/sign-local\/([^/]+)\/(.+)$/))) {
+      const f = storageFiles[m[1] + '/' + decodeURIComponent(m[2])];
+      return f ? send(res, 200, f.data, { 'Content-Type': f.type }) : send(res, 404, 'missing');
+    }
+    if ((m = p.match(/^\/storage\/v1\/object\/([^/]+)\/(.+)$/)) && req.method === 'POST') {
+      const w = whoFromAuth(req), name = decodeURIComponent(m[2]);
+      if (body.length > 5 * 1024 * 1024) return send(res, 413, { message: 'The object exceeded the maximum allowed size' });
+      const r = await psql(asRole('authenticated', w.sub) + ` insert into storage.objects (bucket_id, name, owner) values (${q(m[1])}, ${q(name)}, ${q(w.sub)})
+        on conflict (bucket_id, name) do update set created_at = now(); commit;`);
+      if (!r.ok) return send(res, 403, { message: 'new row violates row-level security policy' });
+      storageFiles[m[1] + '/' + name] = { data: body, type: req.headers['content-type'] };
+      return send(res, 200, { Key: m[1] + '/' + name });
+    }
+
+    // ----- Edge Functions (real code) -----
+    if ((m = p.match(/^\/functions\/v1\/([a-z-]+)$/)) && FUNCS[m[1]]) {
+      const r = await FUNCS[m[1]](new Request(BASE + p, { method: req.method, headers: req.headers, body: ['GET', 'HEAD'].includes(req.method) ? undefined : body }));
+      return send(res, r.status, Buffer.from(await r.arrayBuffer()), { 'Content-Type': r.headers.get('content-type') || 'application/json' });
+    }
+
+    // ----- Fake Paystack -----
+    if (p === '/paystack/transaction/initialize') {
+      if (req.headers.authorization !== 'Bearer ' + PAYSTACK_SECRET) return send(res, 401, { status: false, message: 'Invalid key' });
+      const b = json();
+      PAYSTACK[b.reference] = { ...b, status: 'pending', id: Math.floor(Math.random() * 1e9) };
+      return send(res, 200, { status: true, data: { authorization_url: `${BASE}/paystack/checkout/${b.reference}`, access_code: 'x', reference: b.reference } });
+    }
+    if ((m = p.match(/^\/paystack\/checkout\/(.+)$/))) {
+      const t = PAYSTACK[m[1]]; if (!t) return send(res, 404, 'Unknown');
+      return send(res, 200, `<!doctype html><meta name="viewport" content="width=device-width"><body style="font:16px system-ui;padding:24px;background:#0BA4DB;color:#fff">
+        <h2>Paystack (TEST)</h2><p>${t.email}</p><p style="font-size:28px"><b>NGN ${(t.amount / 100).toLocaleString()}</b></p>
+        <a id="pay" href="/paystack/pay/${m[1]}?ok=1" style="display:block;background:#fff;color:#0BA4DB;padding:14px;border-radius:8px;text-align:center;font-weight:700;text-decoration:none">Pay</a>
+        <p><a id="cancel" href="/paystack/pay/${m[1]}?ok=0" style="color:#fff">Cancel payment</a></p>`);
+    }
+    if ((m = p.match(/^\/paystack\/pay\/(.+)$/))) {
+      const t = PAYSTACK[m[1]]; t.status = url.searchParams.get('ok') === '1' ? 'success' : 'abandoned';
+      const cb = new URL(t.callback_url); cb.searchParams.set('trxref', m[1]); cb.searchParams.set('reference', m[1]);
+      return send(res, 302, '', { Location: cb.toString() });
+    }
+    if ((m = p.match(/^\/paystack\/transaction\/verify\/(.+)$/))) {
+      if (req.headers.authorization !== 'Bearer ' + PAYSTACK_SECRET) return send(res, 401, { status: false });
+      const t = PAYSTACK[decodeURIComponent(m[1])];
+      if (!t) return send(res, 404, { status: false, message: 'Transaction reference not found' });
+      return send(res, 200, { status: true, data: { status: t.status, amount: t.amount, currency: 'NGN', id: t.id, channel: 'card', reference: t.reference, metadata: t.metadata } });
+    }
+    // test helper: fire a correctly signed Paystack webhook at the real webhook function
+    if ((m = p.match(/^\/test\/webhook\/(.+)$/))) {
+      const raw = JSON.stringify({ event: 'charge.success', data: { reference: m[1] } });
+      const sig = crypto.createHmac('sha512', url.searchParams.get('bad') ? 'wrong' : PAYSTACK_SECRET).update(raw).digest('hex');
+      const r = await FUNCS['paystack-webhook'](new Request(BASE + '/functions/v1/paystack-webhook', { method: 'POST', headers: { 'x-paystack-signature': sig }, body: raw }));
+      return send(res, r.status, await r.text(), { 'Content-Type': 'text/plain' });
+    }
+    send(res, 404, { message: 'Not found: ' + p });
+  } catch (e) { console.error(e); send(res, 500, { message: String(e.message || e) }); }
+}).listen(PORT, () => console.log('local supabase on ' + BASE));

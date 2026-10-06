@@ -228,6 +228,23 @@ details.card ul{padding-left:18px;display:grid;gap:6px}
 .msg{padding:10px 14px;border-radius:14px;max-width:85%;font-size:14px;white-space:pre-wrap}
 .msg.me{background:var(--brand-soft);justify-self:end}
 .msg.them{background:var(--surface-2)}
+.msg.sys{background:transparent;color:var(--muted);font-size:13px;justify-self:center;text-align:center;max-width:95%;border:1px dashed var(--line)}
+.msg.adm{background:var(--accent-soft);color:var(--accent-ink)}
+.chat-box{display:grid;gap:8px;max-height:46vh;overflow:auto;padding:4px 2px;align-content:start}
+.chat-form{display:flex;gap:8px;align-items:flex-end}
+.chat-form textarea{min-height:46px;height:46px;border-radius:23px;padding:12px 16px;resize:none}
+.promo{background:linear-gradient(135deg,var(--brand),var(--brand-strong));color:#fff;border-radius:var(--r-lg);overflow:hidden;display:grid;box-shadow:var(--shadow)}
+.promo img{width:100%;max-height:150px;object-fit:cover;display:block}
+.promo .in{padding:16px 18px;display:grid;gap:6px}
+.promo h3{font-size:19px;color:#fff}
+.promo p{color:rgba(255,255,255,.9);font-size:14px}
+.promo details{font-size:12.5px;color:rgba(255,255,255,.85)}
+.promo summary{cursor:pointer;font-weight:700}
+.badge-n{background:var(--bad);color:#fff;border-radius:99px;font-size:11px;font-weight:800;padding:1px 7px;margin-left:6px}
+.rcpt{border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
+.rcpt-h{background:var(--brand);color:#fff;padding:14px 16px;display:flex;align-items:center;gap:10px;font:800 18px var(--f-display)}
+.rcpt-h svg{width:30px;height:30px}
+@media print{.top,.nav,#toast,.noprint{display:none!important}}
 
 /* bottom nav */
 .nav{position:fixed;left:0;right:0;bottom:0;z-index:40;background:color-mix(in srgb,var(--surface) 94%,transparent);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom,0px)}
@@ -289,6 +306,12 @@ const ACCESS = {
   OTHER:  {label:'Host instructions',icon:'chat',  ask:'Email or phone the host should use',  how:'The host gives you access as described in the plan.'}
 };
 const needsContact = t => t !== 'LOGIN';
+const FEE = () => settings().buyer_fee_kobo || 20000;
+const WFEE = () => settings().withdrawal_fee_kobo || 20000;
+const waUrl = () => { const st = settings(); return st.support_whatsapp_link || (st.support_whatsapp ? 'https://wa.me/' + st.support_whatsapp : ''); };
+const REASONS = [['HOST_NO_RESPONSE','Host is not responding'],['INVALID_CREDENTIALS','Login or credentials are invalid'],['ACCESS_NOT_WORKING','Access is not working'],
+  ['WRONG_SUBSCRIPTION','Wrong subscription or plan'],['PAYMENT_ORDER','Payment or order problem'],['OTHER','Something else']];
+const ORDER_NOTE_TYPES = ['ORDER_MESSAGE','ORDER_COMPLETED','NEW_MEMBER','SUBSCRIPTION_JOINED','SUBSCRIPTION_RENEWED','DISPUTE_OPENED','ACCESS_AVAILABLE'];
 
 const ICONS = {
   compass:'<circle cx="12" cy="12" r="9"/><path d="m15.5 8.5-2 5-5 2 2-5z"/>',
@@ -326,7 +349,7 @@ function seatBar(total, taken){ return `<div class="seats" role="img" aria-label
 const hostTag = l => `<span class="host">@${esc(l.host_username)}${l.host_verified ? ic('badge') + 'Verified host' : ''}</span>`;
 
 /* ---------- state ---------- */
-let S = {catalog:null, listings:[], me:null, subs:[], hosting:[], wallet:null, notes:[], tickets:null};
+let S = {catalog:null, listings:[], me:null, subs:[], hosting:[], wallet:null, notes:[], tickets:null, orders:[], requests:[], refs:null};
 const UI = {tab:'explore', cat:'All', q:'', sort:'popular', access:'ANY', verified:false, withSeats:true, maxPrice:0, subs:'active', hide:false};
 // The public link always opens on Explore. Only the "hide balance" choice is remembered on this device.
 try { UI.hide = !!JSON.parse(localStorage.getItem('subsplit-ui') || '{}').hide; } catch(e){}
@@ -342,14 +365,15 @@ async function loadAll(){
   const pub = Promise.all([API.rpc('public_catalog'), API.rpc('explore_listings')]);
   let mine = null;
   if (API.user){
-    mine = Promise.all([API.rpc('my_overview'), API.rpc('my_subscriptions'), API.rpc('my_listings'), API.rpc('my_wallet'), API.rpc('my_notifications')])
+    mine = Promise.all([API.rpc('my_overview'), API.rpc('my_subscriptions'), API.rpc('my_listings'), API.rpc('my_wallet'), API.rpc('my_notifications'),
+                        API.rpc('my_orders'), API.rpc('my_requests'), API.rpc('my_referrals')])
       .catch(async e => { if (e.status === 401 || e.status === 403) { API.forgetSession(); return null; } throw e; });
   }
   const [cat, list] = await pub;
   S.catalog = cat; S.listings = list;
   const m = mine ? await mine : null;
-  if (m){ [S.me, S.subs, S.hosting, S.wallet, S.notes] = m; }
-  else { S.me = null; S.subs = []; S.hosting = []; S.wallet = null; S.notes = []; }
+  if (m){ [S.me, S.subs, S.hosting, S.wallet, S.notes, S.orders, S.requests, S.refs] = m; }
+  else { S.me = null; S.subs = []; S.hosting = []; S.wallet = null; S.notes = []; S.orders = []; S.requests = []; S.refs = null; }
 }
 async function refresh(){
   try { await loadAll(); render(); }
@@ -373,7 +397,7 @@ function nav(){
 }
 function foot(){
   const s = settings();
-  return `<div class="foot"><span>© ${new Date().getFullYear()} ${esc(s.site_name)}</span>${s.support_whatsapp ? `<span>WhatsApp support: <b>+${esc(s.support_whatsapp)}</b></span>` : ''}${s.support_email ? `<span>${esc(s.support_email)}</span>` : ''}</div>`;
+  return `<div class="foot"><span>© ${new Date().getFullYear()} ${esc(s.site_name)}</span>${waUrl() ? `<a href="${esc(waUrl())}" target="_blank" rel="noopener">Chat with support on WhatsApp</a>` : ''}${s.support_email ? `<span>${esc(s.support_email)}</span>` : ''}</div>`;
 }
 
 /* ---------- Explore ---------- */
@@ -394,14 +418,34 @@ function card(l){
   return `<article class="card tap" data-act="open" data-id="${l.id}">
     <div class="row">${tile(l)}<div class="grow"><h3>${esc(l.service)}</h3><p class="muted sm">${esc(l.plan)}</p></div>${l.savings_kobo > 0 ? `<span class="save">Save ${naira(l.savings_kobo)}</span>` : ''}</div>
     <div class="price-row"><span class="price num">${naira(l.seat_kobo)}<small>${per(l.duration_days)}</small></span>${l.compare_kobo > l.seat_kobo ? `<s class="was num">${naira(l.compare_kobo)}${per(l.duration_days)}</s>` : ''}</div>
+    <p class="muted xs">+ ${naira(l.buyer_fee_kobo)} transaction fee at checkout</p>
     ${seatBar(l.seats_total, l.seats_occupied)}
     <p class="sm ${left === 1 ? 'low' : ''}">${full ? 'Full' : `<b>${left} of ${l.seats_total}</b> seats available`}</p>
     <div class="meta">${hostTag(l)}<span>${ACCESS[l.access_type].label}</span><span>${l.duration_days} days</span></div>
     <button class="btn ${full ? '' : 'primary'} block" data-act="join" data-id="${l.id}" ${full ? 'disabled' : ''}>${full ? 'Full' : 'Join seat'}</button>
   </article>`;
 }
+function suggestCard(){
+  const q = UI.q.trim();
+  return `<div class="card"><b>${q ? `Can't find “${esc(q)}”?` : 'No plans yet'}</b>
+    <span class="muted sm">Tell us which subscription you want. We'll add it and notify you.</span>
+    <form class="form" id="f-suggest" novalidate>
+      <div class="field"><label for="sg-name">Subscription name</label><input id="sg-name" maxlength="80" value="${esc(q)}" placeholder="e.g. Disney Plus"></div>
+      <div class="field"><label for="sg-note">Details (optional)</label><input id="sg-note" maxlength="300" placeholder="Plan type, country, anything useful"></div>
+      <button class="btn primary block" type="submit">Suggest a Subscription</button>
+    </form>
+    ${S.requests.length ? `<button class="link" type="button" data-act="requests">See my requests (${S.requests.length})</button>` : ''}</div>`;
+}
 function feedHTML(items){
-  return items.length ? items.map(card).join('') : `<div class="empty"><b>No plans found</b><span>Try another search or category.</span></div>`;
+  return items.length ? items.map(card).join('') : suggestCard();
+}
+function promoHTML(){
+  const list = (S.catalog && S.catalog.promos) || [];
+  return list.map(p => `<section class="promo">${p.banner_url ? `<img src="${esc(p.banner_url)}" alt="">` : ''}<div class="in"><h3>${esc(p.title)}</h3>
+    ${p.description ? `<p>${esc(p.description)}</p>` : ''}
+    ${p.reward_referrer_kobo || p.reward_referee_kobo ? `<p><b>${p.reward_referrer_kobo ? 'Invite a friend: you get ' + naira(p.reward_referrer_kobo) : ''}${p.reward_referrer_kobo && p.reward_referee_kobo ? ' · ' : ''}${p.reward_referee_kobo ? 'they get ' + naira(p.reward_referee_kobo) : ''}</b></p>` : ''}
+    ${p.terms ? `<details><summary>Terms</summary><p>${esc(p.terms)}</p></details>` : ''}
+    ${S.me && S.refs && p.requires_referral ? `<button class="btn sm" style="background:#fff;color:var(--brand-strong);justify-self:start" data-act="shareref">${ic('share')} Share my invite link</button>` : ''}</div></section>`).join('');
 }
 function viewExplore(){
   const s = settings(), items = filtered();
@@ -414,6 +458,7 @@ function viewExplore(){
     <p>${esc(s.hero_text)}</p>
     <div class="hero-actions"><button class="btn primary" data-act="toPlans">Find a seat</button><button class="btn soft" data-act="create">Share a subscription</button></div>
   </section>
+  ${promoHTML()}
   <div class="searchbar"><div class="search">${ic('search')}<input id="q" type="search" placeholder="Search Netflix, Spotify, data…" value="${esc(UI.q)}" aria-label="Search plans" autocomplete="off"></div>
     <button class="icon-btn" data-act="filters" aria-label="Filters">${ic('filter')}${activeFilters ? `<span class="dotn" style="background:var(--brand)">${activeFilters}</span>` : ''}</button></div>
   <div class="chips scroll">${cats.map(c => `<button class="chip" data-act="cat" data-v="${esc(c)}" aria-pressed="${UI.cat === c}">${esc(c)}</button>`).join('')}</div>
@@ -431,28 +476,35 @@ function viewExplore(){
 }
 
 /* ---------- My Subs ---------- */
+const STATUS_PILL = {COMPLETED:'<span class="pill good">Completed</span>'};
 function subCard(m){
   const dl = daysLeft(m), total = Math.max(1, Math.round((ts(m.ends_at) - ts(m.starts_at)) / DAY)), pct = Math.min(100, Math.max(3, 100 - dl / total * 100));
   const live = m.status === 'ACTIVE' || m.status === 'DISPUTED';
-  const pill = {ACTIVE: dl <= (settings().renewal_window_days || 7) ? `<span class="pill warn">Ends in ${dl} day${dl === 1 ? '' : 's'}</span>` : '<span class="pill good">Active</span>',
+  const done = m.status === 'ACTIVE' && m.order_status === 'COMPLETED';
+  const pill = done ? STATUS_PILL.COMPLETED : {ACTIVE: dl <= (settings().renewal_window_days || 7) ? `<span class="pill warn">Ends in ${dl} day${dl === 1 ? '' : 's'}</span>` : '<span class="pill good">Active</span>',
     DISPUTED:'<span class="pill warn">We are helping</span>', COMPLETED:'<span class="pill neutral">Ended</span>', REFUNDED:'<span class="pill bad">Refunded</span>',
     PARTIALLY_REFUNDED:'<span class="pill neutral">Part refunded</span>'}[m.status];
   const access = !live ? '' : m.access_type === 'LOGIN' ? '' :
     m.access_status === 'SENT' ? `<p class="sm" style="color:var(--good)">${ic('check')} Host sent your access to ${esc(m.contact)}</p>` :
     `<p class="sm muted">${ic('clock')} Waiting for the host to send access to ${esc(m.contact)}</p>`;
   const d = m.dispute;
+  const who = d && d.raised_by_role === 'HOST' ? 'The host' : 'You';
   return `<div class="card">
     <div class="row">${tile(m)}<div class="grow"><h3>${esc(m.service)}</h3><p class="muted sm">${esc(m.plan)} · @${esc(m.host_username)}</p></div>${pill}</div>
-    <div class="dates"><div><span>Price</span><b class="num">${naira(m.amount_kobo)}</b></div><div><span>Started</span><b>${fmtShort(m.starts_at)}</b></div><div><span>Ends</span><b>${fmtShort(m.ends_at)}</b></div></div>
+    <div class="dates"><div><span>Seat price</span><b class="num">${naira(m.amount_kobo)}</b></div><div><span>Started</span><b>${fmtShort(m.starts_at)}</b></div><div><span>Ends</span><b>${fmtShort(m.ends_at)}</b></div></div>
+    <p class="muted xs">Order <b>${esc(m.txn_ref || '')}</b> · paid ${naira(m.total_kobo)} (incl. ${naira(m.buyer_fee_kobo)} fee)</p>
     ${live ? `<div class="bar" aria-hidden="true"><i style="width:${pct}%"></i></div><p class="sm muted">${dl} day${dl === 1 ? '' : 's'} remaining${m.renewed ? ' · <b style="color:var(--good)">renewed</b>' : ''}</p>` : ''}
     ${access}
-    ${d && (d.status === 'OPEN' || d.status === 'IN_REVIEW') ? `<p class="tip">We got your report and our team is on it. We'll send you a notification when it's sorted.</p>` : ''}
-    ${d && d.resolution ? `<p class="tip">Your report was resolved${d.resolution === 'REFUND' ? ' with a full refund' : d.resolution === 'PARTIAL_REFUND' ? ' with a partial refund' : ''}.</p>` : ''}
-    ${live ? `<div class="wrap-row">
-      <button class="btn soft sm" data-act="access" data-id="${m.listing_id}">${ic('lock')} Access</button>
-      ${m.can_renew ? `<button class="btn primary sm" data-act="renew" data-id="${m.id}" data-price="${m.renew_price_kobo}">Renew · ${naira(m.renew_price_kobo)}</button>` : ''}
-      ${m.status === 'ACTIVE' ? `<button class="btn line sm" data-act="report" data-id="${m.id}">Something not working?</button>` : ''}
-    </div>` : ''}
+    ${d && (d.status === 'OPEN' || d.status === 'IN_REVIEW') ? `<p class="tip">${who} reported a problem and our team is on it. Report status: <b>${d.status === 'OPEN' ? 'Open' : 'In review'}</b>. We'll notify you when it's sorted.</p>` : ''}
+    ${d && d.resolution ? `<p class="tip">The report was resolved${d.resolution === 'REFUND' ? ' with a full refund' : d.resolution === 'PARTIAL_REFUND' ? ' with a partial refund' : ''}.</p>` : ''}
+    <div class="wrap-row">
+      ${live ? `<button class="btn soft sm" data-act="access" data-id="${m.listing_id}">${ic('lock')} Access</button>` : ''}
+      <button class="btn soft sm" data-act="chat" data-id="${m.id}">${ic('chat')} Chat${m.unread ? `<span class="badge-n">${m.unread}</span>` : ''}</button>
+      <button class="btn line sm" data-act="receipt" data-id="${esc(m.txn_ref || '')}">Receipt</button>
+      ${m.can_complete ? `<button class="btn primary sm" data-act="complete" data-id="${m.id}">Mark completed</button>` : ''}
+      ${m.can_renew ? `<button class="btn primary sm" data-act="renew" data-id="${m.id}" data-price="${m.renew_price_kobo}">Renew · ${naira(m.renew_price_kobo + FEE())}</button>` : ''}
+      ${m.status === 'ACTIVE' ? `<button class="btn danger sm" data-act="report" data-id="${m.id}">${ic('bell')} Report a problem</button>` : ''}
+    </div>
   </div>`;
 }
 function hostCard(l){
@@ -468,11 +520,21 @@ function hostCard(l){
     ${waiting ? `<p class="tip warn">${waiting} member${waiting > 1 ? 's are' : ' is'} waiting for access from you.</p>` : ''}
     ${openReports ? `<p class="tip warn">A member reported a problem. Please reply.</p>` : ''}
     ${l.status === 'REJECTED' && l.review_note ? `<p class="tip">SubSplit: ${esc(l.review_note)}</p>` : ''}
+    ${l.proof_status === 'PENDING' ? `<p class="tip">${ic('clock')} Your proof of purchase is waiting for admin approval. The listing goes live only after it is approved.</p>` : ''}
+    ${l.proof_status === 'REJECTED' ? `<p class="tip warn">Proof rejected${l.proof_reason ? ': ' + esc(l.proof_reason) : ''}. Upload a new one and resubmit.</p>` : ''}
+    ${l.members.reduce((a, m) => a + (m.unread || 0), 0) ? `<p class="tip">${l.members.reduce((a, m) => a + (m.unread || 0), 0)} unread order message(s).</p>` : ''}
     <div class="wrap-row"><button class="btn primary sm" data-act="manage" data-id="${l.id}">${ic('edit')} ${l.status === 'DRAFT' || l.status === 'REJECTED' ? 'Finish & submit' : 'Manage'}</button>${l.status === 'LIVE' ? `<button class="btn line sm" data-act="share" data-id="${l.id}">${ic('share')} Share link</button>` : ''}</div>
   </div>`;
 }
 function signInPrompt(title, text){
   return `<div class="empty" style="margin-top:12px"><b>${title}</b><span>${text}</span><button class="btn primary" data-act="auth">Sign in or create account</button></div>`;
+}
+function ordersHTML(){
+  if (!S.orders.length) return `<div class="empty"><b>No orders yet</b><span>Every purchase gets an order chat with the host and SubSplit support.</span></div>`;
+  const st = {ACTIVE:'<span class="pill good">Active</span>', COMPLETED:'<span class="pill good">Completed</span>', DISPUTED:'<span class="pill warn">Reported</span>', REFUNDED:'<span class="pill bad">Refunded</span>', PARTIALLY_REFUNDED:'<span class="pill neutral">Part refunded</span>'};
+  return `<div class="list">${S.orders.map(o => `<div class="card tap" data-act="chat" data-id="${o.id}">
+    <div class="row">${tile(o)}<div class="grow"><h3>${esc(o.service)}</h3><p class="muted sm">${o.role === 'BUYER' ? 'Host' : 'Member'} @${esc(o.counterparty)} · ${esc(o.txn_ref || '')}</p></div>${st[o.order_status] || ''}</div>
+    <div class="row between"><span class="muted xs">${o.role === 'BUYER' ? 'You bought this' : 'You sold this'} · ${fmtShort(o.created_at)}</span>${o.unread ? `<span class="pill bad">${o.unread} new</span>` : `<span class="muted xs">Open chat</span>`}</div></div>`).join('')}</div>`;
 }
 function viewMySubs(){
   if (!S.me) return `<div class="ptitle"><h1>My Subs</h1></div>${signInPrompt('Your subscriptions live here', 'Sign in to see the seats you joined and the plans you share.')}`;
@@ -480,9 +542,9 @@ function viewMySubs(){
   const current = S.subs.filter(m => (m.status === 'ACTIVE' || m.status === 'DISPUTED') && ts(m.starts_at) <= Date.now());
   const expiring = current.filter(m => m.status === 'ACTIVE' && daysLeft(m) <= win && !m.renewed);
   const past = S.subs.filter(m => !(m.status === 'ACTIVE' || m.status === 'DISPUTED'));
-  const tabs = [['active','Active',current.length],['expiring','Expiring soon',expiring.length],['past','Past',past.length],['hosting','Shared by me',S.hosting.length]];
+  const tabs = [['active','Active',current.length],['expiring','Expiring soon',expiring.length],['past','Past',past.length],['orders','Orders & chats',S.orders.length],['hosting','Shared by me',S.hosting.length]];
   const list = {active:current, expiring, past}[UI.subs];
-  const body = UI.subs === 'hosting'
+  const body = UI.subs === 'orders' ? ordersHTML() : UI.subs === 'hosting'
     ? (S.hosting.length ? `<div class="list">${S.hosting.map(hostCard).join('')}</div>` : `<div class="empty"><b>Earn from your empty seats</b><span>Share a family or team plan you already pay for. SubSplit sets fair prices for you.</span><button class="btn soft sm" data-act="create">Share a subscription</button></div>`)
     : (list.length ? `<div class="list">${list.map(subCard).join('')}</div>` : `<div class="empty"><b>${UI.subs === 'past' ? 'No past subscriptions' : UI.subs === 'expiring' ? 'Nothing ending soon' : "You haven't joined a plan yet"}</b>${UI.subs === 'active' ? `<button class="btn soft sm" data-act="tab" data-v="explore">Find a seat</button>` : ''}</div>`);
   return `
@@ -492,13 +554,15 @@ function viewMySubs(){
 }
 
 /* ---------- Wallet ---------- */
-const TX = {TOP_UP:'Added money', SUBSCRIPTION:'Seat payment', REFUND:'Refund', HOST_EARNING:'Earning available', EARNING_REVERSED:'Earning reversed',
-  WITHDRAWAL:'Withdrawal', WITHDRAWAL_REVERSED:'Withdrawal returned', TRANSFER_IN:'From earnings', TRANSFER_OUT:'Moved to wallet', ADJUSTMENT:'Adjustment'};
+const TX = {TOP_UP:'Deposit', SUBSCRIPTION:'Purchase', PURCHASE_FEE:'Purchase fee', REFUND:'Refund', HOST_EARNING:'Escrow released', EARNING_REVERSED:'Earning reversed',
+  WITHDRAWAL:'Withdrawal', WITHDRAWAL_FEE:'Withdrawal fee', WITHDRAWAL_REVERSED:'Withdrawal returned', TRANSFER_IN:'From earnings', TRANSFER_OUT:'Moved to wallet',
+  ADJUSTMENT:'Adjustment', ADMIN_CREDIT:'Credit from SubSplit', REFERRAL_REWARD:'Referral / promo reward'};
+const RECEIPT_TYPES = ['SUBSCRIPTION','PURCHASE_FEE','WITHDRAWAL','WITHDRAWAL_FEE'];
 function txRows(list){
   if (!list.length) return `<div class="empty"><span>No transactions yet.</span></div>`;
   return `<div class="rows-list">${list.map(t => `<div>
     <span class="dot ${t.amount_kobo > 0 ? 'in' : 'out'}">${ic(t.amount_kobo > 0 ? 'down' : 'up')}</span>
-    <span class="grow"><b class="sm">${esc(TX[t.type] || t.type)}</b><br><span class="muted xs">${esc(t.description)} · ${fmtDT(t.created_at)}${t.account === 'EARNINGS' ? ' · earnings' : ''}</span></span>
+    <span class="grow"><b class="sm">${esc(TX[t.type] || t.type)}</b><br><span class="muted xs">${esc(t.description)} · ${fmtDT(t.created_at)}${t.account === 'EARNINGS' ? ' · earnings' : ''}<br>ID ${esc(t.reference)}${RECEIPT_TYPES.includes(t.type) ? ` · <button class="link xs" data-act="receipt" data-id="${esc(t.reference)}">Receipt</button>` : ''}</span></span>
     <span class="amt num ${t.amount_kobo > 0 ? 'in' : ''}">${t.amount_kobo > 0 ? '+' : '−'}${naira(Math.abs(t.amount_kobo))}</span></div>`).join('')}</div>`;
 }
 function viewWallet(){
@@ -509,26 +573,25 @@ function viewWallet(){
   const wPill = {PENDING:'<span class="pill warn">Requested</span>', APPROVED:'<span class="pill brand">Approved</span>', PAID:'<span class="pill good">Paid</span>', REJECTED:'<span class="pill bad">Returned</span>'};
   const hosting = S.hosting.length || b.earnings_kobo || b.pending_kobo || b.total_earned_kobo;
   return `
-  <div class="ptitle"><h1>Wallet</h1></div>
+  <div class="ptitle"><h1>Wallet</h1><button class="btn line sm" data-act="feecalc">Fee calculator</button></div>
   <div class="money">
-    <div class="lbl"><span>Wallet balance</span><button class="eye" data-act="hide" aria-label="${UI.hide ? 'Show' : 'Hide'} balance">${ic(UI.hide ? 'eyeoff' : 'eye')}</button></div>
-    <div class="big num">${money(b.wallet_kobo)}</div>
+    <div class="lbl"><span>Available balance</span><button class="eye" data-act="hide" aria-label="${UI.hide ? 'Show' : 'Hide'} balance">${ic(UI.hide ? 'eyeoff' : 'eye')}</button></div>
+    <div class="big num">${money(b.available_kobo)}</div>
+    <p class="xs" style="opacity:.85">Deposits ${money(b.wallet_kobo)} · Released earnings ${money(b.earnings_kobo)}. You can withdraw all of it any time.</p>
     <div class="two"><button class="btn" data-act="fund">${ic('plus')} Add money</button><button class="btn ghost" data-act="withdraw">${ic('up')} Withdraw</button></div>
   </div>
-  ${hosting ? `<div class="card">
-    <div class="row between"><h3>Host earnings</h3><button class="link" data-act="earnInfo">How it works</button></div>
-    <div class="quad">
-      <div><span>Available</span><b class="num">${money(b.earnings_kobo)}</b></div>
-      <div><span>Pending</span><b class="num">${money(b.pending_kobo)}</b></div>
-      <div><span>Withdrawn</span><b class="num">${money(b.withdrawn_kobo)}</b></div>
-      <div><span>Total earned</span><b class="num">${money(b.total_earned_kobo)}</b></div>
-    </div>
-    <div class="wrap-row"><button class="btn primary sm" data-act="withdraw" ${b.earnings_kobo > 0 ? '' : 'disabled'}>Withdraw to bank</button><button class="btn line sm" data-act="move" ${b.earnings_kobo > 0 ? '' : 'disabled'}>Move to wallet</button></div>
-  </div>` : ''}
-  ${w.withdrawals.length ? `<div class="sec-head"><h2>Withdrawals</h2></div><div class="rows-list">${w.withdrawals.map(x => `<div><span class="grow"><b class="sm">${naira(x.amount_kobo)} to ${esc(x.bank_name)}</b><br><span class="muted xs">${esc(x.account_number)} · ${fmtDT(x.created_at)}${x.status === 'REJECTED' && x.note ? ' · ' + esc(x.note) : ''}</span></span>${wPill[x.status]}</div>`).join('')}</div>` : ''}
+  <div class="card">
+    <div class="row between"><h3>Pending (escrow)</h3><button class="link" data-act="earnInfo">How it works</button></div>
+    <div class="price-row"><span class="price num">${money(b.pending_kobo)}</span></div>
+    <p class="sm muted">${b.pending_kobo > 0 && b.pending_matures_at ? `Next release on <b>${fmtDate(b.pending_matures_at)}</b>. Host earnings from each seat are held for ${settings().escrow_days || 30} days, then move to Available automatically.` : `Host earnings from each seat are held for ${settings().escrow_days || 30} days, then move to Available automatically.`}</p>
+    ${(w.pending_items || []).length ? `<div class="rows-list">${w.pending_items.map(x => `<div><span class="grow"><b class="sm">${esc(x.service)} seat</b><br><span class="muted xs">Order ${esc(x.txn_ref || '')} · releases ${fmtDate(x.release_at)}${x.status === 'DISPUTED' ? ' · on hold (report open)' : ''}</span></span><span class="amt num">${money(x.host_kobo)}</span></div>`).join('')}</div>` : ''}
+    ${hosting ? `<div class="quad"><div><span>Withdrawn</span><b class="num">${money(b.withdrawn_kobo)}</b></div><div><span>Total earned</span><b class="num">${money(b.total_earned_kobo)}</b></div></div>` : ''}
+    ${b.earnings_kobo > 0 ? `<button class="btn line sm" data-act="move">Move earnings to wallet</button>` : ''}
+  </div>
+  ${w.withdrawals.length ? `<div class="sec-head"><h2>Withdrawals</h2></div><div class="rows-list">${w.withdrawals.map(x => `<div><span class="grow"><b class="sm">${naira(x.payout_kobo)} to ${esc(x.bank_name)}</b><br><span class="muted xs">Requested ${naira(x.amount_kobo)} · fee ${naira(x.fee_kobo)} · ${esc(x.account_number)}<br>${fmtDT(x.created_at)} · ID ${esc(x.reference)}${x.status === 'REJECTED' && x.note ? ' · ' + esc(x.note) : ''}<br><button class="link xs" data-act="receipt" data-id="${esc(x.reference)}">Receipt</button></span></span>${wPill[x.status]}</div>`).join('')}</div>` : ''}
   <div class="sec-head"><h2>Transactions</h2></div>
   ${txRows(tx)}
-  ${w.payments.length ? `<div class="sec-head"><h2>Card payments</h2></div><div class="rows-list">${w.payments.map(p => `<div><span class="grow"><b class="sm">${naira(p.amount_kobo)} · ${p.purpose === 'SEAT' ? 'Seat' : 'Add money'}</b><br><span class="muted xs">${esc(p.reference)} · ${fmtDT(p.created_at)}</span></span>${payPill[p.status]}</div>`).join('')}</div>` : ''}`;
+  ${w.payments.length ? `<div class="sec-head"><h2>Card payments</h2></div><div class="rows-list">${w.payments.map(p => `<div><span class="grow"><b class="sm">${naira(p.amount_kobo)} · ${p.purpose === 'SEAT' ? 'Seat' : 'Deposit'}</b><br><span class="muted xs">${esc(p.reference)} · ${fmtDT(p.created_at)}</span></span>${payPill[p.status]}</div>`).join('')}</div>` : ''}`;
 }
 
 /* ---------- Account ---------- */
@@ -540,7 +603,7 @@ function viewAccount(){
   <details class="card"><summary>Rules for hosts</summary><ul><li>Only share plans you own and pay for, using the sharing method the service allows.</li><li>Upload proof of your plan before it goes live.</li><li>Give members access quickly and keep the plan working for the whole period.</li><li>${esc(s.site_name)} keeps a ${(S.catalog.fee_bps || 1000) / 100}% fee from each seat. Your share becomes available when the member's period ends.</li></ul></details>`;
   const support = `<div class="menu">
     <button data-act="tickets">${ic('chat')}<span class="grow">Message support</span></button>
-    ${s.support_whatsapp ? `<button data-act="copy" data-v="+${esc(s.support_whatsapp)}">${ic('phone')}<span class="grow">WhatsApp +${esc(s.support_whatsapp)}</span>${ic('copy')}</button>` : ''}
+    ${waUrl() ? `<button data-act="wa">${ic('phone')}<span class="grow">Chat with support on WhatsApp</span></button>` : ''}
     ${s.support_email ? `<button data-act="copy" data-v="${esc(s.support_email)}">${ic('mail')}<span class="grow">${esc(s.support_email)}</span>${ic('copy')}</button>` : ''}
   </div>`;
   if (!S.me) return `<div class="ptitle"><h1>Account</h1></div>${signInPrompt('Welcome to ' + esc(s.site_name), 'Create a free account to join plans or share your own.')}<div class="sec-head"><h2>Help</h2></div>${faq}${foot()}`;
@@ -552,7 +615,12 @@ function viewAccount(){
     <button data-act="create">${ic('plus')}<span class="grow">Share a subscription</span></button>
     <button data-act="hosting">${ic('layers')}<span class="grow">Plans I share</span><span class="muted sm">${S.hosting.length}</span></button>
     <button data-act="notes">${ic('bell')}<span class="grow">Notifications</span>${S.me.unread ? `<span class="pill bad">${S.me.unread}</span>` : ''}</button>
+    <button data-act="requests">${ic('search')}<span class="grow">Subscription requests</span><span class="muted sm">${S.requests.length}</span></button>
   </div>
+  ${S.refs ? `<div class="card"><h3>Invite friends</h3>
+    <p class="sm muted">Share your code. When a friend signs up with it and makes a first purchase, you both can earn rewards while a promotion is running.</p>
+    <div class="kv"><div><span>Your code</span><b>${esc(S.refs.code)}</b></div><div><span>Friends invited</span><b>${S.refs.invited}</b></div><div><span>Rewarded</span><b>${S.refs.rewarded} · ${naira(S.refs.earned_kobo)}</b></div></div>
+    <div class="wrap-row"><button class="btn primary sm" data-act="shareref">${ic('share')} Share invite link</button><button class="btn line sm" data-act="copy" data-v="${esc(S.refs.code)}">${ic('copy')} Copy code</button></div></div>` : ''}
   <form class="card form" id="f-profile" novalidate>
     <h3>Your details</h3>
     <div class="field"><label for="p-name">Full name</label><input id="p-name" value="${esc(p.full_name)}" autocomplete="name"></div>
@@ -574,7 +642,7 @@ function openSheet(title, body){
   $('#sheet-box').innerHTML = `<span class="grab"></span><div class="row between"><h2>${title}</h2><button class="x" data-act="close" aria-label="Close">${ic('x')}</button></div>${body}`;
   $('#sheet').hidden = false; document.body.style.overflow = 'hidden'; $('#sheet-box').scrollTop = 0;
 }
-function closeSheet(){ $('#sheet').hidden = true; document.body.style.overflow = ''; }
+function closeSheet(){ if (typeof stopChat === 'function') stopChat(); $('#sheet').hidden = true; document.body.style.overflow = ''; }
 let toastT;
 function toast(msg){ const t = $('#toast'); t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => t.hidden = true, 4200); }
 function needAuth(){ if (!S.me){ authSheet(); return true; } return false; }
@@ -586,10 +654,11 @@ async function detailSheet(id){
   const btn = v.is_host ? `<button class="btn soft block" data-act="manage" data-id="${l.id}">This is your plan · Manage</button>`
     : v.is_member ? `<button class="btn soft block" data-act="access" data-id="${l.id}">You're in · See access</button>`
     : l.seats_available <= 0 ? `<button class="btn block" disabled>This plan is full</button>`
-    : `<button class="btn primary block" data-act="join" data-id="${l.id}">Join seat · ${naira(l.seat_kobo)}</button>`;
+    : `<button class="btn primary block" data-act="join" data-id="${l.id}">Join seat · ${naira(l.total_kobo)}</button>`;
   openSheet('Plan details', `
     <div class="row">${tile(l, true)}<div class="grow"><h3 style="font-size:20px">${esc(l.service)}</h3><p class="muted sm">${esc(l.plan)}</p></div>${l.savings_kobo > 0 ? `<span class="save">Save ${naira(l.savings_kobo)}</span>` : ''}</div>
     <div class="price-row"><span class="price num" style="font-size:28px">${naira(l.seat_kobo)}<small>${per(l.duration_days)}</small></span>${l.compare_kobo > l.seat_kobo ? `<s class="was num">${naira(l.compare_kobo)}</s>` : ''}</div>
+    <p class="muted xs">+ ${naira(l.buyer_fee_kobo)} transaction fee at checkout · total <b>${naira(l.total_kobo)}</b></p>
     <div style="display:grid;gap:8px">${seatBar(l.seats_total, l.seats_occupied)}<p class="sm muted">${l.seats_total} total seats · ${l.seats_occupied} taken · <b class="${l.seats_available === 1 ? 'low' : ''}">${l.seats_available} available</b></p></div>
     <div class="info">
       <div>${ic(a.icon)}<span class="grow"><b>${a.label}</b><span>${a.how}</span></span></div>
@@ -609,7 +678,7 @@ async function confirmSheet(id){
   if (v.is_host){ toast('This is your own plan.'); return; }
   if (v.is_member){ toast('You already have a seat in this plan.'); return; }
   if (l.seats_available <= 0){ toast('Sorry, this plan is full.'); return; }
-  const enough = v.wallet_kobo >= l.seat_kobo;
+  const enough = v.wallet_kobo >= l.total_kobo;
   const contact = needsContact(l.access_type)
     ? `<div class="field"><label for="j-contact">${a.ask}</label><input id="j-contact" ${l.access_type === 'DATA' ? 'inputmode="tel" placeholder="0803 123 4567"' : 'type="email" inputmode="email" placeholder="you@gmail.com"'} value="${esc(l.access_type === 'DATA' ? S.me.profile.phone : S.me.profile.email)}"><small>Only the host sees this, to give you access.</small></div>` : '';
   openSheet('Confirm your seat', `
@@ -620,12 +689,14 @@ async function confirmSheet(id){
       <div><span>Access</span><b>${a.label}</b></div>
       <div><span>Host</span><b>@${esc(l.host_username)}${l.host_verified ? ' ✓' : ''}</b></div>
       <div><span>Available seats</span><b>${l.seats_available}</b></div>
-      <div class="total"><span>Total</span><b class="num">${naira(l.seat_kobo)}</b></div>
+      <div><span>Transaction fee</span><b class="num">${naira(l.buyer_fee_kobo)}</b></div>
+      <div class="total"><span>Total to pay</span><b class="num">${naira(l.total_kobo)}</b></div>
     </div>
     ${contact}
     ${enough
-      ? `<button class="btn primary block" data-act="payWallet" data-id="${l.id}">Confirm & Pay ${naira(l.seat_kobo)}</button><p class="muted xs" style="text-align:center">Paid from your wallet (${naira(v.wallet_kobo)})</p>`
-      : `<button class="btn primary block" data-act="payCard" data-id="${l.id}">Confirm & Pay ${naira(l.seat_kobo)}</button><p class="muted xs" style="text-align:center">You'll pay securely with Paystack: card, transfer or USSD.</p>`}
+      ? `<button class="btn primary block" data-act="payWallet" data-id="${l.id}">Confirm & Pay ${naira(l.total_kobo)}</button><p class="muted xs" style="text-align:center">Paid from your wallet (${naira(v.wallet_kobo)})</p>`
+      : `<button class="btn primary block" data-act="payCard" data-id="${l.id}">Confirm & Pay ${naira(l.total_kobo)}</button><p class="muted xs" style="text-align:center">You'll pay securely with Paystack: card, transfer or USSD.</p>`}
+    <p class="muted xs" style="text-align:center">A ${naira(l.buyer_fee_kobo)} transaction fee is added to every purchase. You get a receipt and an order chat with the host.</p>
     <p class="muted xs" style="text-align:center">By joining you agree to use only your own seat and follow the host's note.</p>`);
 }
 
@@ -643,18 +714,155 @@ async function accessSheet(lid){
     <button class="btn primary block" data-act="close">Got it</button>`);
 }
 
-function reportSheet(mid){
-  openSheet('Something not working?', `<form class="form" id="f-report" data-id="${mid}" novalidate>
-    <p class="muted">Tell us what happened and we'll help.</p>
-    <div class="field"><label for="r-reason">What's wrong?</label><select id="r-reason">
-      <option value="NOT_WORKING">The login or plan stopped working</option><option value="NO_ACCESS">I didn't get my invite or access</option>
-      <option value="WRONG_PLAN">It's not the plan I paid for</option><option value="REMOVED">I was removed from the plan</option><option value="OTHER">Something else</option></select></div>
-    <div class="field"><label for="r-text">Tell us more</label><textarea id="r-text" placeholder="e.g. The password was changed yesterday and I can't sign in."></textarea></div>
-    <button class="btn primary block" type="submit">Send to support</button></form>`);
+function reportSheet(mid, fromChat){
+  openSheet('Report a problem', `<form class="form" id="f-report" data-id="${mid}" data-chat="${fromChat ? 1 : ''}" novalidate>
+    <p class="muted">This alerts SubSplit support right away and puts the money for this order on hold while we look into it.</p>
+    <div class="field"><label for="r-reason">What's wrong?</label><select id="r-reason">${REASONS.map(([k, l]) => `<option value="${k}">${l}</option>`).join('')}</select></div>
+    <div class="field"><label for="r-text">Tell us more</label><textarea id="r-text" placeholder="e.g. The password was changed yesterday and I can't sign in."></textarea><small>At least 10 letters.</small></div>
+    <button class="btn danger block" type="submit">Send alarm to support</button></form>`);
+}
+
+/* ---------- order chat ---------- */
+const CHAT = {id:null, timer:null, last:0};
+function stopChat(){ if (CHAT.timer){ clearInterval(CHAT.timer); CHAT.timer = null; } CHAT.id = null; }
+function msgHTML(m){
+  const cls = m.role === 'SYSTEM' ? 'sys' : m.role === 'ADMIN' ? 'them adm' : m.mine ? 'me' : 'them';
+  const who = m.role === 'SYSTEM' || m.mine ? '' : `<b>${m.role === 'ADMIN' ? 'SubSplit support' : '@' + esc(m.sender)} <span class="xs muted">(${m.role.toLowerCase()})</span></b>\n`;
+  return `<div class="msg ${cls}">${who}${esc(m.body)}<br><span class="xs muted">${fmtDT(m.created_at)}</span></div>`;
+}
+async function chatSheet(mid, keepScroll){
+  if (needAuth()) return;
+  let c;
+  try { c = await API.rpc('order_chat', {p_membership:mid}); } catch(e){ toast(e.message); return; }
+  const o = c.order, buyer = c.role === 'BUYER';
+  const stateTxt = {ACTIVE:'Active', COMPLETED:'Completed', DISPUTED:'Reported · support is helping', REFUNDED:'Refunded', PARTIALLY_REFUNDED:'Part refunded'}[o.order_status] || o.order_status;
+  const mine = S.subs.find(x => x.id === mid), canComplete = buyer && mine && mine.can_complete;
+  stopChat(); CHAT.id = mid;
+  openSheet('Order chat', `
+    <div class="row">${tile(o)}<div class="grow"><h3 style="font-size:18px">${esc(o.service)}</h3><p class="muted xs">Order ${esc(o.txn_ref || '')} · ${esc(stateTxt)}</p></div></div>
+    <div class="chat-box" id="chat-box">${c.messages.map(msgHTML).join('')}</div>
+    <form class="chat-form" id="f-chat" data-id="${mid}" novalidate><textarea id="ch-body" maxlength="2000" placeholder="Write a message…" aria-label="Message"></textarea><button class="btn primary" type="submit" aria-label="Send">${ic('up')}</button></form>
+    <div class="wrap-row">
+      ${canComplete ? `<button class="btn primary sm" data-act="complete" data-id="${mid}" data-chat="1">Mark completed</button>` : ''}
+      ${buyer ? `<button class="btn line sm" data-act="receipt" data-id="${esc(o.txn_ref || '')}">Receipt</button>` : ''}
+      ${o.status === 'ACTIVE' ? `<button class="btn danger sm" data-act="report" data-id="${mid}" data-chat="1">${ic('bell')} Report a problem</button>` : ''}
+    </div>
+    ${o.dispute ? `<p class="tip">Report status: <b>${esc(o.dispute.status.replace('_', ' ').toLowerCase())}</b>${o.dispute.resolution ? ' · ' + esc(o.dispute.resolution.replace('_', ' ').toLowerCase()) : ''}</p>` : ''}
+    <p class="muted xs">SubSplit support can read this chat and step in if needed. Never share passwords for other accounts.</p>`);
+  const box = $('#chat-box'); box.scrollTop = box.scrollHeight;
+  CHAT.last = c.messages.length ? c.messages[c.messages.length - 1].id : 0;
+  CHAT.timer = setInterval(async () => {
+    if ($('#sheet').hidden || CHAT.id !== mid || !$('#chat-box')){ stopChat(); return; }
+    try {
+      const n = await API.rpc('order_chat', {p_membership:mid}), last = n.messages.length ? n.messages[n.messages.length - 1].id : 0;
+      if (last !== CHAT.last && $('#chat-box')){ CHAT.last = last; const b = $('#chat-box'); b.innerHTML = n.messages.map(msgHTML).join(''); b.scrollTop = b.scrollHeight; }
+    } catch(e){}
+  }, 7000);
+}
+
+/* ---------- receipts (PDF made in the browser; print view as backup) ---------- */
+let RCPT = null;
+function rcptRows(r){
+  const rows = [['Transaction ID', r.txn_id], ['Date', fmtDT(r.created_at)], ['Name', r.user.name || ''], ['Username', '@' + r.user.username], ['Email', r.user.email || '']];
+  if (r.kind === 'PURCHASE'){
+    rows.push(['Item', r.item], ['Host', '@' + r.host], ['Period', fmtDate(r.period_start) + ' to ' + fmtDate(r.period_end)], ['Price', naira(r.price_kobo)],
+      ['Transaction fee', naira(r.fee_kobo)], ['Total paid', naira(r.total_kobo)]);
+    if (r.refund_kobo > 0) rows.push(['Refunded', naira(r.refund_kobo)]);
+  } else {
+    rows.push(['Withdrawal to', r.item.replace('Withdrawal to ', '')], ['Account name', r.account_name], ['Account', r.account], ['Amount requested', naira(r.price_kobo)],
+      ['Withdrawal fee', naira(r.fee_kobo)], ['Amount paid out', naira(r.total_kobo)]);
+    if (r.paid_at) rows.push(['Paid on', fmtDT(r.paid_at)]);
+  }
+  rows.push(['Payment method', r.method], ['Status', r.status]);
+  return rows;
+}
+async function receiptSheet(ref){
+  if (needAuth()) return;
+  try { RCPT = await API.rpc('my_receipt', {p_ref:ref}); } catch(e){ toast(e.message); return; }
+  const r = RCPT;
+  openSheet(r.kind === 'PURCHASE' ? 'Purchase receipt' : 'Withdrawal receipt', `
+    <div class="rcpt"><div class="rcpt-h">${LOGO}<span>${esc(settings().site_name)}</span></div>
+    <div class="kv" style="border:0;border-radius:0">${rcptRows(r).map(([k, v]) => `<div><span>${esc(k)}</span><b>${esc(v)}</b></div>`).join('')}</div></div>
+    <div class="wrap-row noprint"><button class="btn primary" data-act="rcptpdf">${ic('down')} Download PDF</button><button class="btn line" data-act="rcptprint">View / print</button></div>`);
+}
+// Tiny PDF writer (no libraries): header band + label/value lines. Only plain text, so "₦" is written as "NGN ".
+function pdfText(t){ return String(t == null ? '' : t).replace(/₦/g, 'NGN ').replace(/[^\x20-\x7E]/g, '').replace(/([\\()])/g, '\\$1'); }
+function buildPDF(title, rows, brand){
+  let c = '0.357 0.357 0.839 rg 0 770 595 72 re f\n1 0.71 0.28 rg 40 790 14 32 re f\n';
+  c += `BT /F2 22 Tf 1 1 1 rg 66 796 Td (${pdfText(brand)}) Tj ET\n`;
+  c += `BT /F1 12 Tf 1 1 1 rg 400 796 Td (${pdfText(title)}) Tj ET\n`;
+  let y = 730;
+  rows.forEach(([k, v]) => {
+    c += `BT /F1 10 Tf 0.42 0.42 0.52 rg 50 ${y} Td (${pdfText(k)}) Tj ET\n`;
+    c += `BT /F2 11 Tf 0.09 0.09 0.17 rg 200 ${y} Td (${pdfText(v)}) Tj ET\n`;
+    c += `0.9 0.9 0.94 RG 50 ${y - 8} m 545 ${y - 8} l S\n`;
+    y -= 28;
+  });
+  c += `BT /F1 9 Tf 0.42 0.42 0.52 rg 50 ${y - 10} Td (${pdfText('This receipt was generated by ' + brand + '. Keep the transaction ID for support.')}) Tj ET\n`;
+  const objs = ['<< /Type /Catalog /Pages 2 0 R >>', '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 5 0 R /F2 6 0 R >> >> /Contents 4 0 R >>',
+    `<< /Length ${c.length} >>\nstream\n${c}endstream`, '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>', '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>'];
+  let out = '%PDF-1.4\n', off = [];
+  objs.forEach((o, i) => { off.push(out.length); out += `${i + 1} 0 obj\n${o}\nendobj\n`; });
+  const x = out.length;
+  out += `xref\n0 ${objs.length + 1}\n0000000000 65535 f \n` + off.map(n => String(n).padStart(10, '0') + ' 00000 n \n').join('');
+  out += `trailer\n<< /Size ${objs.length + 1} /Root 1 0 R >>\nstartxref\n${x}\n%%EOF`;
+  return new Blob([out], {type:'application/pdf'});
+}
+function downloadReceipt(){
+  if (!RCPT) return;
+  try {
+    const blob = buildPDF(RCPT.kind === 'PURCHASE' ? 'Purchase receipt' : 'Withdrawal receipt', rcptRows(RCPT), settings().site_name || 'SubSplit');
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `receipt-${RCPT.txn_id}.pdf`;
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  } catch(e){ printReceipt(); }
+}
+function printReceipt(){
+  if (!RCPT) return;
+  const w = window.open('', '_blank');
+  if (!w){ window.print(); return; }
+  w.document.write(`<!doctype html><title>Receipt ${esc(RCPT.txn_id)}</title><body style="font-family:Arial;max-width:520px;margin:24px auto;color:#17172b"><div style="background:#5B5BD6;color:#fff;padding:16px;border-radius:12px;font:bold 20px Arial">${esc(settings().site_name)} · ${RCPT.kind === 'PURCHASE' ? 'Purchase receipt' : 'Withdrawal receipt'}</div><table style="width:100%;border-collapse:collapse;margin-top:12px">${rcptRows(RCPT).map(([k, v]) => `<tr><td style="padding:8px 4px;border-bottom:1px solid #e6e6f0;color:#6b6b85">${esc(k)}</td><td style="padding:8px 4px;border-bottom:1px solid #e6e6f0;text-align:right;font-weight:bold">${esc(v)}</td></tr>`).join('')}</table><script>window.onload=()=>window.print()<\/script></body>`);
+  w.document.close();
+}
+
+/* ---------- fee calculator ---------- */
+function feeCalcSheet(){
+  openSheet('Fee calculator', `<div class="form">
+    <div class="field"><label for="fc-buy">Seat price you want to pay (₦)</label><input id="fc-buy" inputmode="decimal" placeholder="e.g. 2500"></div>
+    <div class="kv" id="fc-buy-out"></div>
+    <div class="field"><label for="fc-wd">Amount you want to withdraw (₦)</label><input id="fc-wd" inputmode="decimal" placeholder="e.g. 5000"></div>
+    <div class="kv" id="fc-wd-out"></div>
+    <p class="muted xs">Fees are flat: ${naira(FEE())} on every purchase and ${naira(WFEE())} on every withdrawal. Deposits are free. Minimum deposit ${naira(settings().min_topup_kobo)}, minimum withdrawal ${naira(settings().min_withdrawal_kobo)}.</p></div>`);
+  calcFees();
+}
+function calcFees(){
+  const b = $('#fc-buy'), w = $('#fc-wd'); if (!b || !w) return;
+  const pk = toKobo(b.value), wk = toKobo(w.value);
+  $('#fc-buy-out').innerHTML = pk > 0 ? `<div><span>Seat price</span><b class="num">${naira(pk)}</b></div><div><span>Fee</span><b class="num">${naira(FEE())}</b></div><div class="total"><span>You pay</span><b class="num">${naira(pk + FEE())}</b></div>` : '';
+  const min = settings().min_withdrawal_kobo;
+  $('#fc-wd-out').innerHTML = wk > 0 ? (wk < min ? `<div><span>Minimum withdrawal</span><b>${naira(min)}</b></div>` : `<div><span>Withdraw</span><b class="num">${naira(wk)}</b></div><div><span>Fee</span><b class="num">−${naira(WFEE())}</b></div><div class="total"><span>You receive</span><b class="num">${naira(wk - WFEE())}</b></div>`) : '';
+}
+function calcWithdraw(){
+  const a = $('#w-amt'), out = $('#w-calc'); if (!a || !out) return;
+  const k = toKobo(a.value), min = settings().min_withdrawal_kobo, av = bal().available_kobo;
+  out.innerHTML = k <= 0 ? '' : k < min ? `<div><span>Minimum withdrawal</span><b>${naira(min)}</b></div>` : k > av ? `<div><span>You can withdraw up to</span><b>${naira(av)}</b></div>`
+    : `<div><span>Amount</span><b class="num">${naira(k)}</b></div><div><span>Withdrawal fee</span><b class="num">−${naira(WFEE())}</b></div><div class="total"><span>You receive</span><b class="num">${naira(k - WFEE())}</b></div>`;
+}
+
+/* ---------- subscription requests ---------- */
+function requestsSheet(){
+  if (needAuth()) return;
+  const st = {PENDING:'<span class="pill warn">Waiting</span>', IN_PROGRESS:'<span class="pill brand">We are on it</span>', ADDED:'<span class="pill good">Added</span>', DECLINED:'<span class="pill bad">Not possible</span>'};
+  openSheet('Subscription requests', `<form class="form" id="f-suggest" novalidate>
+      <div class="field"><label for="sg-name">Subscription name</label><input id="sg-name" maxlength="80" placeholder="e.g. Disney Plus"></div>
+      <div class="field"><label for="sg-note">Details (optional)</label><input id="sg-note" maxlength="300"></div>
+      <button class="btn primary block" type="submit">Suggest a Subscription</button></form>
+    ${S.requests.length ? `<div class="rows-list">${S.requests.map(r => `<div><span class="grow"><b class="sm">${esc(r.service_name)}</b><br><span class="muted xs">${fmtDate(r.created_at)}${r.note ? ' · ' + esc(r.note) : ''}</span></span>${st[r.status]}</div>`).join('')}</div>` : '<p class="muted sm">You have not asked for anything yet.</p>'}`);
 }
 
 /* ---------- host: share a subscription ---------- */
 const H = {service:null, plan:null, markup:null, seats:null};
+let PENDING_REF = '';
 function createSheet(){
   if (needAuth()) return;
   const services = S.catalog.services;
@@ -707,9 +915,10 @@ function renderCreate(){
         <textarea id="h-access" placeholder="${p.access_type === 'LOGIN' ? 'Email: …\nPassword: …\nUse only the profile with your name.' : 'e.g. I send invites within 2 hours of payment.'}"></textarea>
         <small>Only members who have paid can see this. Never shown on Explore.</small></div>
       <div class="field"><label for="h-note">Note on your listing (optional)</label><input id="h-note" maxlength="300" placeholder="e.g. Please don't change the PIN"></div>
-      ${p.host_proof_required ? `<div class="field"><label for="h-proof">Proof you own this plan</label><input id="h-proof" type="file" accept="image/jpeg,image/png,image/webp,application/pdf"><small>A receipt or a screenshot of the subscription page. Max 5 MB. Only SubSplit sees it.</small></div>` : ''}
+      ${p.host_proof_required ? `<div class="field"><label for="h-proof">Proof you own this plan</label><input id="h-proof" type="file" accept="image/jpeg,image/png,image/webp,application/pdf"><small>A receipt or a screenshot of the subscription page. Max 5 MB. Only SubSplit sees it. Your listing goes live only after an admin approves it.</small></div>` : ''}
       <div class="field"><label for="h-proofnote">Anything we should know? (optional)</label><input id="h-proofnote" maxlength="500" placeholder="e.g. Renews on the 5th every month"></div>
       <label class="check"><input type="checkbox" id="h-own"> I own and pay for this plan, and I'll share it the way ${esc(s.name)} allows.</label>
+      <label class="check"><input type="checkbox" id="h-agree"> <span>${esc(settings().agreement_text || 'I understand and agree that funds from this listing will be held in a 30-day escrow cycle before becoming available for withdrawal.')}</span></label>
       <button class="btn primary block" type="submit">Submit for review</button>
     </form>`;
   }
@@ -730,14 +939,16 @@ async function manageSheet(id){
        ${l.review_note ? `<p class="tip warn">SubSplit: ${esc(l.review_note)}</p>` : ''}
        ${l.host_proof_required ? `<div class="field"><label for="s-proof">Proof you own this plan</label><input id="s-proof" type="file" accept="image/jpeg,image/png,image/webp,application/pdf"><small>${l.proof_uploaded ? 'Proof already uploaded. Add a new file only to replace it.' : 'A receipt or screenshot. Max 5 MB.'}</small></div>` : ''}
        <div class="field"><label for="s-note">Message to SubSplit (optional)</label><input id="s-note" value="${esc(l.proof_note)}"></div>
+       <label class="check"><input type="checkbox" id="s-agree"> <span>${esc(settings().agreement_text || 'I understand and agree that funds from this listing will be held in a 30-day escrow cycle before becoming available for withdrawal.')}</span></label>
        <button class="btn primary block" type="submit">Submit for review</button></form>` : ''}
     ${l.status === 'PENDING_REVIEW' ? '<p class="tip">SubSplit is checking your listing. You will get a notification when it is live.</p>' : ''}
     ${l.status === 'SUSPENDED' ? '<p class="tip warn">This listing is suspended. Please message support.</p>' : ''}
     <div class="sec-head"><h2 style="font-size:18px">Members</h2></div>
     ${live.length ? `<div class="rows-list">${live.map(m => `<div><span class="grow"><b class="sm">@${esc(m.buyer_username)}${m.buyer_name ? ' · ' + esc(m.buyer_name) : ''}</b>
         ${m.contact ? `<br><span class="xs" style="color:var(--brand-strong);font-weight:700">${esc(m.contact)}</span>` : ''}
-        <br><span class="muted xs">Until ${fmtShort(m.ends_at)} · you earn ${naira(m.host_kobo)}</span></span>
-        ${l.access_type !== 'LOGIN' && m.access_status === 'WAITING' ? `<button class="btn primary sm" data-act="sent" data-id="${m.id}">Mark sent</button>` : m.status === 'DISPUTED' ? '<span class="pill warn">Reported</span>' : '<span class="pill good">OK</span>'}</div>`).join('')}</div>`
+        <br><span class="muted xs">Order ${esc(m.txn_ref || '')} · until ${fmtShort(m.ends_at)} · you earn ${naira(m.host_kobo)}${m.escrow === 'HELD' ? ' · available ' + fmtDate(m.release_at) : ''}</span></span>
+        <span style="display:grid;gap:6px;justify-items:end"><button class="btn soft sm" data-act="chat" data-id="${m.id}">${ic('chat')}${m.unread ? `<span class="badge-n">${m.unread}</span>` : ''}</button>
+        ${l.access_type !== 'LOGIN' && m.access_status === 'WAITING' ? `<button class="btn primary sm" data-act="sent" data-id="${m.id}">Mark sent</button>` : m.status === 'DISPUTED' ? '<span class="pill warn">Reported</span>' : m.order_status === 'COMPLETED' ? '<span class="pill good">Completed</span>' : '<span class="pill good">OK</span>'}</span></div>`).join('')}</div>`
       : '<p class="muted sm">No members yet.</p>'}
     ${l.disputes.filter(d => d.status === 'OPEN' || d.status === 'IN_REVIEW').map(d => `<form class="form card" id="f-dreply" data-id="${d.id}" novalidate style="box-shadow:none;background:var(--warn-soft)">
        <b>A member needs help</b><p class="sm">“${esc(d.details)}”</p>
@@ -763,6 +974,7 @@ function authSheet(mode = 'in'){
     <form class="form" id="${up ? 'f-signup' : 'f-signin'}" novalidate>
       ${up ? `<div class="field"><label for="a-name">Full name</label><input id="a-name" autocomplete="name"></div>
       <div class="field"><label for="a-phone">Phone number</label><input id="a-phone" inputmode="tel" autocomplete="tel" placeholder="0803 123 4567"></div>` : ''}
+      ${up ? `<div class="field"><label for="a-ref">Referral code (optional)</label><input id="a-ref" autocapitalize="characters" maxlength="12" value="${esc(PENDING_REF)}" placeholder="Got a code from a friend?"></div>` : ''}
       <div class="field"><label for="a-email">Email</label><input id="a-email" type="email" autocomplete="email" inputmode="email" autocapitalize="none"></div>
       <div class="field"><label for="a-pass">Password</label><input id="a-pass" type="password" autocomplete="${up ? 'new-password' : 'current-password'}" placeholder="${up ? 'At least 8 characters' : ''}"></div>
       <button class="btn primary block" type="submit">${up ? 'Create account' : 'Sign in'}</button>
@@ -776,7 +988,7 @@ function fundSheet(preKobo){
   if (needAuth()) return;
   const s = settings();
   openSheet('Add money', `<form class="form" id="f-fund" novalidate>
-    <div class="field"><label for="f-amt">Amount (₦)</label><input id="f-amt" inputmode="numeric" value="${preKobo ? Math.ceil(preKobo / 100) : 5000}"><small>Between ${naira(s.min_topup_kobo)} and ${naira(s.max_topup_kobo)}.</small></div>
+    <div class="field"><label for="f-amt">Amount (₦)</label><input id="f-amt" inputmode="numeric" value="${preKobo ? Math.ceil(preKobo / 100) : 5000}"><small>Between ${naira(s.min_topup_kobo)} and ${naira(s.max_topup_kobo)}. No fee on deposits.</small></div>
     <div class="chips">${[1000, 2000, 5000, 10000, 20000].map(a => `<button type="button" class="chip" data-act="famt" data-v="${a}">${naira(a * 100)}</button>`).join('')}</div>
     <p class="tip">You'll pay securely on Paystack with card, bank transfer or USSD, then come back here.</p>
     <button class="btn primary block" type="submit">Continue to Paystack</button></form>`);
@@ -784,25 +996,27 @@ function fundSheet(preKobo){
 function withdrawSheet(){
   if (needAuth()) return;
   const b = bal(), s = settings();
-  if (!(b.earnings_kobo > 0)){
-    openSheet('Withdraw', `<p class="muted">Only host earnings can be sent to a bank. Wallet money is for paying for seats.</p>${b.pending_kobo ? `<p class="tip">${naira(b.pending_kobo)} is pending and becomes available as members' periods end.</p>` : ''}<button class="btn primary block" data-act="create">Share a subscription</button>`);
+  if (b.available_kobo < s.min_withdrawal_kobo){
+    openSheet('Withdraw', `<p class="muted">The smallest withdrawal is <b>${naira(s.min_withdrawal_kobo)}</b>. Your available balance is ${naira(b.available_kobo)}.</p>${b.pending_kobo ? `<p class="tip">${naira(b.pending_kobo)} is in escrow and becomes available${b.pending_matures_at ? ' from ' + fmtDate(b.pending_matures_at) : ''}.</p>` : ''}<button class="btn primary block" data-act="fund">Add money</button>`);
     return;
   }
   const banks = ['Access Bank','Ecobank','FCMB','Fidelity Bank','First Bank','GTBank','Kuda','Moniepoint','Opay','Palmpay','Polaris Bank','Stanbic IBTC','Sterling Bank','UBA','Union Bank','Wema Bank','Zenith Bank'];
-  openSheet('Withdraw earnings', `<form class="form" id="f-withdraw" novalidate>
-    <div class="kv"><div><span>Available</span><b class="num">${naira(b.earnings_kobo)}</b></div><div><span>Minimum withdrawal</span><b class="num">${naira(s.min_withdrawal_kobo)}</b></div></div>
-    <div class="field"><label for="w-amt">Amount (₦)</label><input id="w-amt" inputmode="decimal" value="${(b.earnings_kobo / 100).toFixed(b.earnings_kobo % 100 ? 2 : 0)}"></div>
+  openSheet('Withdraw to bank', `<form class="form" id="f-withdraw" novalidate>
+    <div class="kv"><div><span>Available to withdraw</span><b class="num">${naira(b.available_kobo)}</b></div><div><span>Minimum withdrawal</span><b class="num">${naira(s.min_withdrawal_kobo)}</b></div><div><span>Withdrawal fee</span><b class="num">${naira(WFEE())}</b></div></div>
+    <div class="field"><label for="w-amt">Amount to withdraw (₦)</label><input id="w-amt" inputmode="decimal" value="${(b.available_kobo / 100).toFixed(b.available_kobo % 100 ? 2 : 0)}"></div>
+    <div class="kv" id="w-calc"></div>
     <div class="field"><label for="w-bank">Bank</label><select id="w-bank">${banks.map(x => `<option>${x}</option>`).join('')}</select></div>
     <div class="field"><label for="w-acct">Account number</label><input id="w-acct" inputmode="numeric" maxlength="10" placeholder="10 digits"></div>
     <div class="field"><label for="w-name">Account name</label><input id="w-name" value="${esc(S.me.profile.full_name)}"></div>
     <button class="btn primary block" type="submit">Request withdrawal</button></form>`);
+  calcWithdraw();
 }
 function moveSheet(){
   openSheet('Move to wallet', `<form class="form" id="f-move" novalidate><p class="muted sm">Use your available earnings to pay for seats.</p><div class="field"><label for="mv-amt">Amount (₦)</label><input id="mv-amt" inputmode="decimal" value="${(bal().earnings_kobo / 100).toFixed(bal().earnings_kobo % 100 ? 2 : 0)}"></div><button class="btn primary block" type="submit">Move to wallet</button></form>`);
 }
 async function notesSheet(){
   const list = S.notes || [];
-  openSheet('Notifications', list.length ? `<div class="rows-list">${list.map(n => `<div style="align-items:flex-start"><span class="dot ${n.read ? 'out' : 'in'}">${ic('bell')}</span><span class="grow"><b class="sm">${esc(n.title)}</b>${n.body ? `<br><span class="sm muted">${esc(n.body)}</span>` : ''}<br><span class="xs muted">${fmtDT(n.created_at)}</span></span></div>`).join('')}</div>` : `<div class="empty"><span>No notifications yet.</span></div>`);
+  openSheet('Notifications', list.length ? `<div class="rows-list">${list.map(n => `<div style="align-items:flex-start;${n.ref && ORDER_NOTE_TYPES.includes(n.type) ? 'cursor:pointer' : ''}" ${n.ref && ORDER_NOTE_TYPES.includes(n.type) ? `data-act="chat" data-id="${esc(n.ref)}"` : n.type === 'REQUEST_ADDED' ? 'data-act="tab" data-v="explore"' : ''}><span class="dot ${n.read ? 'out' : 'in'}">${ic('bell')}</span><span class="grow"><b class="sm">${esc(n.title)}</b>${n.body ? `<br><span class="sm muted">${esc(n.body)}</span>` : ''}<br><span class="xs muted">${fmtDT(n.created_at)}</span></span></div>`).join('')}</div>` : `<div class="empty"><span>No notifications yet.</span></div>`);
   if (S.me && S.me.unread){ try { await API.rpc('mark_notifications_read'); S.me.unread = 0; S.notes.forEach(n => n.read = true); render(); } catch(e){} }
 }
 async function ticketsSheet(openId){
@@ -823,15 +1037,15 @@ async function ticketsSheet(openId){
 }
 function helpSheet(){
   const s = settings();
-  openSheet('Help', `<div class="menu"><button data-act="tickets">${ic('chat')}<span class="grow">Message support</span></button>${s.support_whatsapp ? `<button data-act="copy" data-v="+${esc(s.support_whatsapp)}">${ic('phone')}<span class="grow">WhatsApp +${esc(s.support_whatsapp)}</span>${ic('copy')}</button>` : ''}</div>
+  openSheet('Help', `<div class="menu"><button data-act="tickets">${ic('chat')}<span class="grow">Message support</span></button>${waUrl() ? `<button data-act="wa">${ic('phone')}<span class="grow">Chat with support on WhatsApp</span></button>` : ''}</div>
   <div class="info"><div>${ic('shield')}<span class="grow"><b>Your payment is protected</b><span>${esc(s.site_name)} holds your payment while you use your seat. If something goes wrong, tell us from My Subs and we'll help or refund you.</span></span></div>
   <div>${ic('wallet')}<span class="grow"><b>Fair prices</b><span>${esc(s.site_name)} sets the normal price and seat limits. Hosts can only add 10% to 30%.</span></span></div>
   <div>${ic('lock')}<span class="grow"><b>Private access</b><span>Logins and invites are only shown to members who have paid.</span></span></div></div>`);
 }
 function earnInfoSheet(){
   openSheet('How host earnings work', `<div class="info">
-    <div>${ic('clock')}<span class="grow"><b>Pending</b><span>When a member pays, your share (seat price minus the ${(S.catalog.fee_bps || 1000) / 100}% fee) shows as pending.</span></span></div>
-    <div>${ic('check')}<span class="grow"><b>Available</b><span>When the member's period ends, it moves to Available. You can withdraw it or move it to your wallet.</span></span></div>
+    <div>${ic('clock')}<span class="grow"><b>Pending</b><span>When a member pays, your share (seat price minus the ${(S.catalog.fee_bps || 1000) / 100}% fee) is held in escrow for ${settings().escrow_days || 30} days and shows as pending.</span></span></div>
+    <div>${ic('check')}<span class="grow"><b>Available</b><span>After ${settings().escrow_days || 30} days it moves to Available automatically (once). You can then withdraw it. Withdrawals cost ${naira(WFEE())}.</span></span></div>
     <div>${ic('shield')}<span class="grow"><b>If a member reports a problem</b><span>That seat's money waits until support sorts it out with you.</span></span></div></div>`);
 }
 function filtersSheet(){
@@ -905,10 +1119,10 @@ document.addEventListener('click', async e => {
     case 'payCard': { const c = $('#j-contact'); startPaystack(el, {purpose:'SEAT', listing_id:id, contact:c ? c.value.trim() : ''}); break; }
     case 'access': accessSheet(id); break;
     case 'renew': {
-      const price = +el.dataset.price;
-      if (bal().wallet_kobo < price){ fundSheet(price - bal().wallet_kobo); toast(`Add ${naira(price - bal().wallet_kobo)} to renew.`); break; }
+      const price = +el.dataset.price + FEE();
+      if (bal().wallet_kobo < price){ fundSheet(price - bal().wallet_kobo); toast(`Add ${naira(price - bal().wallet_kobo)} to renew (includes the ${naira(FEE())} fee).`); break; }
       run(el, () => API.rpc('renew_membership', {p_id:id}), 'Renewed. Your next period starts when this one ends.'); break; }
-    case 'report': reportSheet(id); break;
+    case 'report': reportSheet(id, !!el.dataset.chat); break;
     case 'create': createSheet(); break;
     case 'hsvc': H.service = id; H.plan = null; renderCreate(); break;
     case 'hmark': H.markup = +v; renderCreate(); break;
@@ -932,9 +1146,26 @@ document.addEventListener('click', async e => {
     case 'tickets': ticketsSheet(); break;
     case 'ticket': ticketsSheet(id); break;
     case 'copy': copyText(v); break;
+    case 'wa': window.open(waUrl(), '_blank', 'noopener'); break;
+    case 'chat': chatSheet(id); break;
+    case 'receipt': receiptSheet(id); break;
+    case 'rcptpdf': downloadReceipt(); break;
+    case 'rcptprint': printReceipt(); break;
+    case 'feecalc': feeCalcSheet(); break;
+    case 'requests': requestsSheet(); break;
+    case 'shareref': {
+      const url = location.origin + location.pathname + '?ref=' + S.refs.code;
+      if (navigator.share){ try { await navigator.share({title:settings().site_name, text:`Join me on ${settings().site_name}. Use my code ${S.refs.code}.`, url}); break; } catch(err){ if (err.name === 'AbortError') break; } }
+      copyText(url); break; }
+    case 'complete':
+      if (!confirm('Mark this order as completed? Only do this if your access works.')) break;
+      if (await run(el, () => API.rpc('complete_order', {p_membership:id}), 'Order marked as completed.')){ if (el.dataset.chat) chatSheet(id); }
+      break;
   }
 });
 document.addEventListener('input', e => {
+  if (e.target.id === 'w-amt') calcWithdraw();
+  if (e.target.id === 'fc-buy' || e.target.id === 'fc-wd') calcFees();
   if (e.target.id === 'q'){ UI.q = e.target.value; const items = filtered(); $('#feed').innerHTML = feedHTML(items); $('#count').textContent = `${items.length} plan${items.length === 1 ? '' : 's'}`; }
 });
 document.addEventListener('change', e => {
@@ -961,7 +1192,7 @@ document.addEventListener('submit', async e => {
       if (!em || !pw){ toast('Enter your email and password.'); break; }
       if (await run(btn, () => API.signIn(em, pw), 'Welcome back!')) closeSheet(); break; }
     case 'f-signup': {
-      const d = {full_name:val('a-name').trim(), phone:val('a-phone').trim(), email:val('a-email').trim(), password:val('a-pass')};
+      const d = {full_name:val('a-name').trim(), phone:val('a-phone').trim(), email:val('a-email').trim(), password:val('a-pass'), referral_code:val('a-ref').trim().toUpperCase()};
       if (d.full_name.length < 2){ toast('Enter your full name.'); break; }
       if (!/^\S+@\S+\.\S+$/.test(d.email)){ toast('Enter a real email address.'); break; }
       if (d.password.length < 8){ toast('Use a password with at least 8 characters.'); break; }
@@ -973,32 +1204,58 @@ document.addEventListener('submit', async e => {
       const pw = val('np'); if (pw.length < 8){ toast('Use at least 8 characters.'); break; }
       if (await run(btn, () => API.updatePassword(pw), 'Password changed.')) closeSheet(); break; }
     case 'f-profile': run(btn, () => API.rpc('update_my_profile', {p_full_name:val('p-name'), p_phone:val('p-phone'), p_username:val('p-user').trim().toLowerCase()}), 'Details saved.'); break;
-    case 'f-fund': startPaystack(btn, {purpose:'TOPUP', amount_kobo:toKobo(val('f-amt'))}); break;
+    case 'f-fund': {
+      const k = toKobo(val('f-amt')), st = settings();
+      if (k < st.min_topup_kobo){ toast(`The smallest deposit is ${naira(st.min_topup_kobo)}.`); break; }
+      if (k > st.max_topup_kobo){ toast(`The largest deposit is ${naira(st.max_topup_kobo)}.`); break; }
+      startPaystack(btn, {purpose:'TOPUP', amount_kobo:k}); break; }
     case 'f-withdraw': {
       const d = {p_amount_kobo:toKobo(val('w-amt')), p_bank:val('w-bank'), p_account_number:val('w-acct').replace(/\D/g, ''), p_account_name:val('w-name')};
-      if (await run(btn, () => API.rpc('request_withdrawal', d), 'Withdrawal requested. We will send it to your bank soon.')) closeSheet(); break; }
+      if (d.p_amount_kobo < settings().min_withdrawal_kobo){ toast(`The smallest withdrawal is ${naira(settings().min_withdrawal_kobo)}.`); break; }
+      if (d.p_amount_kobo > bal().available_kobo){ toast(`You can withdraw up to ${naira(bal().available_kobo)}.`); break; }
+      if (d.p_account_number.length !== 10){ toast('Account numbers have 10 digits.'); break; }
+      const wr = await run(btn, () => API.rpc('request_withdrawal', d));
+      if (wr){ closeSheet(); toast(`Withdrawal requested. You will receive ${naira(wr.payout_kobo)} (fee ${naira(wr.fee_kobo)}).`); receiptSheet(wr.reference); }
+      break; }
     case 'f-move': if (await run(btn, () => API.rpc('move_earnings', {p_amount_kobo:toKobo(val('mv-amt'))}), 'Moved to your wallet.')) closeSheet(); break;
-    case 'f-report': if (await run(btn, () => API.rpc('open_dispute', {p_membership:f.dataset.id, p_reason:val('r-reason'), p_details:val('r-text')}), "Thanks. We're on it and will update you soon.")) closeSheet(); break;
+    case 'f-report': {
+      if (val('r-text').trim().length < 10){ toast('Tell us a little more (at least 10 letters).'); break; }
+      const mid = f.dataset.id, back = f.dataset.chat;
+      if (await run(btn, () => API.rpc('report_order', {p_membership:mid, p_reason:val('r-reason'), p_details:val('r-text')}), "Alarm sent. Support has been alerted and your order is flagged.")){ closeSheet(); if (back) chatSheet(mid); }
+      break; }
+    case 'f-chat': {
+      const body = val('ch-body').trim(), mid = f.dataset.id;
+      if (!body){ toast('Write a message first.'); break; }
+      try { await API.rpc('order_send', {p_membership:mid, p_body:body}); } catch(err){ toast(err.message); break; }
+      chatSheet(mid); break; }
+    case 'f-suggest': {
+      const name = val('sg-name').trim();
+      if (!S.me){ authSheet('in'); break; }
+      if (name.length < 2){ toast('Type the name of the subscription you want.'); break; }
+      if (await run(btn, () => API.rpc('suggest_subscription', {p_name:name, p_details:val('sg-note')}), 'Request sent. We will notify you when it is added.')){ if (!$('#sheet').hidden) requestsSheet(); }
+      break; }
     case 'f-filters':
       UI.sort = val('fl-sort'); UI.access = val('fl-access'); UI.maxPrice = toKobo(val('fl-max')); UI.verified = $('#fl-ver').checked; UI.withSeats = $('#fl-seats').checked;
       closeSheet(); render(); break;
     case 'f-create': {
       if (!$('#h-own').checked){ toast('Tick the box to confirm you own this plan.'); break; }
+      if (!$('#h-agree').checked){ toast('Tick the 30-day escrow agreement to continue.'); break; }
       const s = S.catalog.services.find(x => x.id === H.service), p = s.plans.find(x => x.id === H.plan);
       const file = $('#h-proof') && $('#h-proof').files[0];
       if (p.host_proof_required && !file){ toast('Add proof that you own this plan (receipt or screenshot).'); break; }
       const r = await run(btn, async () => {
         const c = await API.rpc('host_create_listing', {p_plan:p.id, p_markup_pct:H.markup, p_seats:H.seats, p_access:val('h-access'), p_note:val('h-note')});
         const path = await uploadProof(c.listing_id, file);
-        return API.rpc('host_submit_listing', {p_listing:c.listing_id, p_proof_path:path, p_proof_note:val('h-proofnote')});
+        return API.rpc('host_submit_listing', {p_listing:c.listing_id, p_proof_path:path, p_proof_note:val('h-proofnote'), p_agree:true});
       });
-      if (r){ closeSheet(); UI.subs = 'hosting'; go('mysubs'); toast(r.status === 'LIVE' ? 'Your listing is live!' : 'Sent for review. We will notify you when it is live.'); }
+      if (r){ closeSheet(); UI.subs = 'hosting'; go('mysubs'); toast(r.status === 'LIVE' ? 'Your listing is live!' : 'Sent for review. It goes live after an admin approves your proof.'); }
       break; }
     case 'f-submit': {
       const file = $('#s-proof') && $('#s-proof').files[0];
+      if (!$('#s-agree').checked){ toast('Tick the 30-day escrow agreement to continue.'); break; }
       const r = await run(btn, async () => {
         const path = await uploadProof(f.dataset.id, file);
-        return API.rpc('host_submit_listing', {p_listing:f.dataset.id, p_proof_path:path, p_proof_note:val('s-note')});
+        return API.rpc('host_submit_listing', {p_listing:f.dataset.id, p_proof_path:path, p_proof_note:val('s-note'), p_agree:true});
       });
       if (r){ closeSheet(); toast(r.status === 'LIVE' ? 'Your listing is live!' : 'Sent for review.'); }
       break; }
@@ -1037,7 +1294,9 @@ async function handlePaymentReturn(){
     return;
   }
   const back = API.consumeAuthRedirect();
+  { const rq = new URLSearchParams(location.search).get('ref'); if (rq){ PENDING_REF = rq.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 12); history.replaceState(null, '', location.pathname); } }
   await refresh();
+  if (PENDING_REF && !S.me) authSheet('up');
   if (back && back.error) toast(back.error);
   else if (back && back.type === 'recovery') passwordSheet('Set a new password');
   else if (back && back.type === 'signup') toast('Email confirmed. Welcome to SubSplit!');

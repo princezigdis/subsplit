@@ -101,7 +101,7 @@
     },
     async signUp(d) {
       const j = await call('/auth/v1/signup?redirect_to=' + encodeURIComponent(here()),
-        { body: { email: d.email, password: d.password, data: { full_name: d.full_name, phone: d.phone } }, auth: false });
+        { body: { email: d.email, password: d.password, data: { full_name: d.full_name, phone: d.phone, referral_code: d.referral_code || '' } }, auth: false });
       if (j && j.access_token) { save(toSession(j)); return { confirm: false }; }
       return { confirm: true };
     },
