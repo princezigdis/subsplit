@@ -330,6 +330,51 @@ await step('referral', async () => {
   check('Referral is recorded at sign-up', sql(`select count(*) from referrals r join profiles p on p.id = r.referred_id where p.email = 'friend@subsplit.ng'`) === '1');
 });
 
+// ---------- 6-digit email code: sign-up, wrong code, resend, unconfirmed sign-in, forgot password ----------
+await step('email codes', async () => {
+  const hasSession = p => p.evaluate(() => !!localStorage.getItem('subsplit-session'));
+  const fillUp = async (p, em) => {
+    await p.goto(B); await p.waitForSelector('.hero');
+    await p.click('.top [data-act=auth]'); await p.click('[data-act=authmode][data-v=up]');
+    await p.fill('#a-name', 'Code Tester'); await p.fill('#a-phone', '08031112222'); await p.fill('#a-email', em); await p.fill('#a-pass', 'password123');
+    await p.click('#f-signup [type=submit]');
+  };
+  const c = await newPage(); PAGES.code = c;
+  await fillUp(c, 'coder@code.test'); await c.waitForSelector('#f-code');
+  const sheet = await c.innerText('#sheet-box');
+  check('Sign-up asks for a code (no link), shows the email and 15-minute life', sheet.includes('coder@code.test') && sheet.includes('15 minutes') && sheet.includes('6-digit'), sheet.slice(0, 120));
+  check('Not signed in until the code is checked', !(await hasSession(c)));
+  check('"Send a new code" waits 60 seconds first', await c.$eval('#c-resend', b => b.disabled && /in \d+s/.test(b.textContent)));
+  await c.fill('#c-code', 'abc'); await c.click('#f-code [type=submit]');
+  check('Letters are rejected before asking the server', /6-digit/.test(await toast(c)));
+  await c.fill('#c-code', '000000'); await c.click('#f-code [type=submit]');
+  const bad = await toast(c);
+  check('Wrong code gives a clear message and stays on the code screen', /wrong or has expired/.test(bad) && !!(await c.$('#f-code')) && !(await hasSession(c)), bad);
+  await c.fill('#c-code', '123 456'); await c.click('#f-code [type=submit]');
+  check('Right code (spaces ignored) confirms and signs in', /Email confirmed/.test(await toast(c)) && await hasSession(c));
+  check('Profile and wallet were created for the new account', sql(`select count(*) from profiles where email = 'coder@code.test'`) === '1');
+
+  const u = await newPage(); PAGES.unconf = u;
+  await fillUp(u, 'late@code.test'); await u.waitForSelector('#f-code');
+  await u.evaluate(() => document.querySelector('[data-act=close]') && 0); await u.goto(B); await u.waitForSelector('.hero');
+  await u.click('.top [data-act=auth]'); await u.fill('#a-email', 'late@code.test'); await u.fill('#a-pass', 'password123'); await u.click('#f-signin [type=submit]');
+  await u.waitForSelector('#f-code');
+  check('Signing in before confirming opens the code screen', (await u.innerText('#sheet-box')).includes('late@code.test') && !(await hasSession(u)));
+
+  const f = await newPage(); PAGES.forgot = f;
+  await f.goto(B); await f.waitForSelector('.hero'); await f.click('.top [data-act=auth]');
+  await f.click('[data-act=forgot]'); check('Forgot password with no email asks for the email', /Type your email/.test(await toast(f)));
+  await f.fill('#a-email', 'coder@code.test'); await f.click('[data-act=forgot]'); await f.waitForSelector('#f-code');
+  check('Forgot password sends a code (not a link)', (await f.innerText('#sheet-box')).includes('Reset your password'));
+  await f.fill('#c-code', '123456'); await f.click('#f-code [type=submit]'); await f.waitForSelector('#f-pass');
+  check('Right code lets the person choose a new password', (await f.innerText('#sheet-box')).includes('Choose a new password'));
+  await f.fill('#np', 'brandnew9876'); await f.click('#f-pass [type=submit]'); check('New password saved', /Password changed/.test(await toast(f)));
+  const g = await newPage(); PAGES.relogin = g;
+  await g.goto(B); await g.waitForSelector('.hero'); await g.click('.top [data-act=auth]');
+  await g.fill('#a-email', 'coder@code.test'); await g.fill('#a-pass', 'brandnew9876'); await g.click('#f-signin [type=submit]');
+  check('Signing in with the new password works', /Welcome back/.test(await toast(g)) && await hasSession(g));
+});
+
 // ---------- admin dashboard health + phone layouts ----------
 await step('health', async () => {
   await admin.click('.side [data-v=dashboard]'); await admin.waitForSelector('h1:has-text("Dashboard")');

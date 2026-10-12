@@ -1,7 +1,7 @@
 /* =====================================================================
    SubSplit API client (shared by the customer app and the admin app)
    Talks to Supabase over HTTPS:
-     /auth/v1       sign up, sign in, password reset
+     /auth/v1       sign up, sign in, email codes, password reset
      /rest/v1/rpc   database functions (every rule is checked there)
      /storage/v1    host proof uploads (private bucket)
      /functions/v1  Paystack payment functions
@@ -38,10 +38,11 @@
   function friendly(msg, status) {
     const m = String(msg || '');
     if (/Invalid login credentials/i.test(m)) return 'Wrong email or password.';
-    if (/Email not confirmed/i.test(m)) return 'Please confirm your email first. Check your inbox.';
+    if (/Email not confirmed/i.test(m)) return 'Your email is not confirmed yet. Enter the code we sent you.';
+    if (/Token has expired or is invalid|otp_expired|otp.*(invalid|expired)/i.test(m)) return 'That code is wrong or has expired. Tap "Send a new code" and try again.';
     if (/already registered|already been registered|already exists/i.test(m)) return 'An account with this email already exists. Sign in instead.';
     if (/Password should|weak password/i.test(m)) return 'Use a stronger password (at least 8 characters, letters and numbers).';
-    if (/rate limit|too many/i.test(m)) return 'Too many tries. Please wait a minute and try again.';
+    if (/rate limit|too many|only request this after/i.test(m)) return 'Please wait a minute before trying again.';
     if (/JWT expired|invalid JWT|bad_jwt/i.test(m)) return 'Your session expired. Please sign in again.';
     if (/^permission denied/i.test(m)) return 'You are not allowed to do that.';
     if (status === 0) return 'No internet connection. Check your network and try again.';
@@ -99,18 +100,26 @@
                        expires_at: h.get('expires_at'), expires_in: h.get('expires_in') }));
       return { type: h.get('type') || 'signin' };
     },
+    // Sign-up sends a 6-digit code by email. The account is only active after the code is checked (verifyCode).
     async signUp(d) {
       const j = await call('/auth/v1/signup?redirect_to=' + encodeURIComponent(here()),
         { body: { email: d.email, password: d.password, data: { full_name: d.full_name, phone: d.phone, referral_code: d.referral_code || '' } }, auth: false });
       if (j && j.access_token) { save(toSession(j)); return { confirm: false }; }
       return { confirm: true };
     },
+    // type: 'signup' (new account) or 'recovery' (forgot password). Signs the person in when the code is right.
+    async verifyCode(email, token, type) {
+      const j = await call('/auth/v1/verify', { body: { type: type || 'signup', email, token: String(token).replace(/\s+/g, '') }, auth: false });
+      save(toSession(j));
+    },
+    resendCode(email) { return call('/auth/v1/resend', { body: { type: 'signup', email }, auth: false }); },
     async signIn(email, password) {
       const j = await call('/auth/v1/token?grant_type=password', { body: { email, password }, auth: false });
       save(toSession(j));
     },
     async signOut() { try { await call('/auth/v1/logout', { body: {} }); } catch (e) { /* already signed out */ } save(null); },
     forgetSession() { save(null); },
+    // Sends a 6-digit code (not a link). Finish with verifyCode(email, code, 'recovery') then updatePassword().
     resetPassword(email) { return call('/auth/v1/recover?redirect_to=' + encodeURIComponent(here()), { body: { email }, auth: false }); },
     updatePassword(password) { return authed('/auth/v1/user', { method: 'PUT', body: { password } }); },
     rpc(fn, args) { return authed('/rest/v1/rpc/' + fn, { body: args || {} }); },

@@ -984,6 +984,31 @@ function authSheet(mode = 'in'){
 function passwordSheet(title){
   openSheet(title || 'Change password', `<form class="form" id="f-pass" novalidate><div class="field"><label for="np">New password</label><input id="np" type="password" autocomplete="new-password" placeholder="At least 8 characters"></div><button class="btn primary block" type="submit">Save password</button></form>`);
 }
+/* 6-digit email code (sign-up and forgot password). Valid for 15 minutes (set in Supabase). */
+let codeTimer = null;
+function codeSheet(email, type){
+  const rec = type === 'recovery';
+  openSheet(rec ? 'Reset your password' : 'Confirm your email', `
+    <form class="form" id="f-code" data-email="${esc(email)}" data-type="${type}" novalidate>
+      <p class="muted">We sent a 6-digit code to <b>${esc(email)}</b>. It works for 15 minutes. Check your spam folder if you don't see it.</p>
+      <div class="field"><label for="c-code">Your code</label>
+        <input id="c-code" inputmode="numeric" autocomplete="one-time-code" maxlength="10" placeholder="123456" style="letter-spacing:6px;font-size:22px;text-align:center;font-weight:700"></div>
+      <button class="btn primary block" type="submit">${rec ? 'Continue' : 'Confirm and continue'}</button>
+      <div class="row between"><button class="link" type="button" data-act="resendcode" id="c-resend">Send a new code</button><button class="link" type="button" data-act="authmode" data-v="${rec ? 'in' : 'up'}">Use a different email</button></div>
+    </form>`);
+  setTimeout(() => { const i = $('#c-code'); if (i) i.focus(); }, 60);
+  codeCooldown(60);
+}
+function codeCooldown(sec){
+  clearInterval(codeTimer);
+  const tick = () => {
+    const b = $('#c-resend');
+    if (!b || !b.isConnected){ clearInterval(codeTimer); return; }
+    if (sec > 0){ b.disabled = true; b.textContent = 'Send a new code in ' + sec + 's'; sec--; }
+    else { b.disabled = false; b.textContent = 'Send a new code'; clearInterval(codeTimer); }
+  };
+  tick(); codeTimer = setInterval(tick, 1000);
+}
 function fundSheet(preKobo){
   if (needAuth()) return;
   const s = settings();
@@ -1133,7 +1158,12 @@ document.addEventListener('click', async e => {
     case 'pause': if (await run(el, () => API.rpc('host_set_paused', {p_listing:id, p_paused:v === '1'}), v === '1' ? 'Listing paused.' : 'Listing is live again.')) closeSheet(); break;
     case 'auth': authSheet('in'); break;
     case 'authmode': authSheet(v); break;
-    case 'forgot': { const em = $('#a-email').value.trim(); if (!em){ toast('Type your email above first.'); break; } run(el, () => API.resetPassword(em), 'Check your email for a link to reset your password.'); break; }
+    case 'forgot': { const em = $('#a-email').value.trim(); if (!em){ toast('Type your email above first.'); break; }
+      if (await run(el, () => API.resetPassword(em))) codeSheet(em, 'recovery'); break; }
+    case 'resendcode': { const f = $('#f-code'); if (!f) break;
+      const em = f.dataset.email, rec = f.dataset.type === 'recovery';
+      if (await run(el, () => rec ? API.resetPassword(em) : API.resendCode(em), 'A new code is on its way.')){ const i = $('#c-code'); if (i){ i.value = ''; i.focus(); } codeCooldown(60); }
+      break; }
     case 'password': passwordSheet(); break;
     case 'signout': run(el, async () => { await API.signOut(); UI.tab = 'explore'; }, 'Signed out.'); break;
     case 'fund': fundSheet(0); break;
@@ -1190,15 +1220,26 @@ document.addEventListener('submit', async e => {
     case 'f-signin': {
       const em = val('a-email').trim(), pw = val('a-pass');
       if (!em || !pw){ toast('Enter your email and password.'); break; }
-      if (await run(btn, () => API.signIn(em, pw), 'Welcome back!')) closeSheet(); break; }
+      let needCode = false;
+      const ok = await run(btn, async () => { try { await API.signIn(em, pw); } catch (err){ needCode = /not confirmed/i.test(err.message); throw err; } }, 'Welcome back!');
+      if (needCode){ API.resendCode(em).catch(() => {}); codeSheet(em, 'signup'); }
+      else if (ok) closeSheet();
+      break; }
     case 'f-signup': {
       const d = {full_name:val('a-name').trim(), phone:val('a-phone').trim(), email:val('a-email').trim(), password:val('a-pass'), referral_code:val('a-ref').trim().toUpperCase()};
       if (d.full_name.length < 2){ toast('Enter your full name.'); break; }
       if (!/^\S+@\S+\.\S+$/.test(d.email)){ toast('Enter a real email address.'); break; }
       if (d.password.length < 8){ toast('Use a password with at least 8 characters.'); break; }
       const r = await run(btn, () => API.signUp(d));
-      if (r && r.confirm) resultSheet(true, 'Check your email', `We sent a link to <b>${esc(d.email)}</b>. Tap it to confirm your account.`);
+      if (r && r.confirm) codeSheet(d.email, 'signup');
       else if (r){ closeSheet(); toast('Account created. Welcome!'); }
+      break; }
+    case 'f-code': {
+      const code = val('c-code').replace(/\s+/g, ''), em = f.dataset.email, type = f.dataset.type;
+      if (!/^\d{6,10}$/.test(code)){ toast('Enter the 6-digit code from your email.'); break; }
+      if (!(await run(btn, () => API.verifyCode(em, code, type)))) break;
+      if (type === 'recovery') passwordSheet('Choose a new password');
+      else { closeSheet(); toast('Email confirmed. Welcome to SubSplit!'); }
       break; }
     case 'f-pass': {
       const pw = val('np'); if (pw.length < 8){ toast('Use at least 8 characters.'); break; }

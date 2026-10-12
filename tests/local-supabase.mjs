@@ -65,6 +65,7 @@ for (const name of ['payments-init', 'payments-verify', 'paystack-webhook']) {
 
 // ---------- fake Paystack ----------
 const PAYSTACK = {};  // reference -> tx
+const UNCONFIRMED = new Set(), RESENDS = [];
 const storageFiles = {};
 
 function send(res, status, body, headers = {}) {
@@ -95,11 +96,23 @@ http.createServer(async (req, res) => {
     // ----- Auth -----
     if (p === '/auth/v1/signup') {
       const b = json();
+      const codeMode = /@code\.test$/i.test(String(b.email || ''));
       if (!b.email || !b.password || b.password.length < 6) return send(res, 422, { msg: 'Password should be at least 6 characters' });
       const r = await psql(`insert into auth.users (email, raw_user_meta_data, test_password) values (${q(b.email.toLowerCase())}, ${q(b.data || {})}, ${q(b.password)}) returning id`);
       if (!r.ok) return send(res, 422, { msg: 'User already registered' });
+      if (codeMode) { UNCONFIRMED.add(b.email.toLowerCase()); return send(res, 200, { id: r.out, email: b.email.toLowerCase(), confirmation_sent_at: new Date().toISOString() }); }
       return send(res, 200, makeSession({ id: r.out, email: b.email.toLowerCase() }));
     }
+    // 6-digit email code flow (the real Supabase sends the code by email; here it is always 123456)
+    if (p === '/auth/v1/verify') {
+      const b = json(), em = String(b.email || '').toLowerCase();
+      if (b.token !== '123456' || !['signup', 'recovery', 'email'].includes(b.type)) return send(res, 403, { code: 'otp_expired', msg: 'Token has expired or is invalid' });
+      const r = await psql(`select id from auth.users where email = ${q(em)}`);
+      if (!r.out) return send(res, 403, { code: 'otp_expired', msg: 'Token has expired or is invalid' });
+      UNCONFIRMED.delete(em);
+      return send(res, 200, makeSession({ id: r.out, email: em }));
+    }
+    if (p === '/auth/v1/resend') { RESENDS.push(String(json().email || '').toLowerCase()); return send(res, 200, {}); }
     if (p === '/auth/v1/token') {
       const b = json();
       if (url.searchParams.get('grant_type') === 'refresh_token') {
@@ -107,6 +120,7 @@ http.createServer(async (req, res) => {
         const r = await psql(`select email from auth.users where id = ${q(id)}`);
         return r.out ? send(res, 200, makeSession({ id, email: r.out })) : send(res, 400, { error_description: 'Invalid Refresh Token' });
       }
+      if (UNCONFIRMED.has(String(b.email || '').toLowerCase())) return send(res, 400, { error_code: 'email_not_confirmed', msg: 'Email not confirmed' });
       const r = await psql(`select id from auth.users where email = ${q(String(b.email || '').toLowerCase())} and test_password = ${q(b.password)}`);
       return r.out ? send(res, 200, makeSession({ id: r.out, email: b.email.toLowerCase() })) : send(res, 400, { error: 'invalid_grant', error_description: 'Invalid login credentials' });
     }
