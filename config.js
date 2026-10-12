@@ -1,5 +1,5 @@
 // =====================================================================
-//  SubSplit public configuration (used by the customer app AND the admin app)
+//  SplitSub public configuration (used by the customer app AND the admin app)
 //
 //  Both values below are SAFE to be public. They only identify your
 //  Supabase project. All security is enforced by the database.

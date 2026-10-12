@@ -1,5 +1,5 @@
 // =====================================================================
-//  SubSplit Edge Function: paystack-webhook
+//  SplitSub Edge Function: paystack-webhook
 //  Paystack calls this when a payment succeeds (backup in case the
 //  customer closes their browser before returning to the site).
 //  1. Checks the request really came from Paystack (HMAC SHA-512 signature).

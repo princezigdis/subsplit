@@ -45,7 +45,7 @@ await step('host create listing', async () => {
   await host.click('.hero [data-act=create]');
   await host.click('.svc-grid button:has-text("Netflix")');
   const calc = await host.textContent('#sheet-box');
-  check('Host sees platform price ₦8,500 + 4-seat limit (read-only)', calc.includes('₦8,500') && calc.includes('4 seats · set by SubSplit') && !(await host.$('#sheet-box input[id*=price]')));
+  check('Host sees platform price ₦8,500 + 4-seat limit (read-only)', calc.includes('₦8,500') && calc.includes('4 seats · set by SplitSub') && !(await host.$('#sheet-box input[id*=price]')));
   check('Default 30% markup: ₦11,050 total, ₦2,763/seat, host earns ₦2,486.70', calc.includes('₦11,050') && calc.includes('₦2,763') && calc.includes('₦2,486.70'), '');
   check('Markup choices stop at 30%', (await host.$$eval('[data-act=hmark]', b => b.map(x => x.dataset.v).join(','))) === '10,15,20,25,30');
   await host.click('[data-act=hmark][data-v="20"]');
@@ -182,7 +182,7 @@ await step('order chat', async () => {
   await admin.click('[data-act=achat]'); await admin.waitForSelector('#f-achat');
   const at = await admin.textContent('#achat-box');
   check('Admin can read buyer and host messages', at.includes('thanks for the seat') && at.includes('Welcome!'));
-  await admin.fill('#ac-body', 'SubSplit support here, shout if you need us.'); await admin.click('#f-achat [type=submit]');
+  await admin.fill('#ac-body', 'SplitSub support here, shout if you need us.'); await admin.click('#f-achat [type=submit]');
   await admin.waitForSelector('#achat-box :text("shout if you need us")');
   check('Admin message saved and audited', sql(`select count(*) from order_messages where sender_role = 'ADMIN'`) === '1' && sql(`select count(*) from admin_audit_logs where action = 'ORDER_CHAT_MESSAGE'`) === '1');
   await admin.click('#sheet-box [data-act=close]');

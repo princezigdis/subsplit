@@ -1,5 +1,5 @@
 // =====================================================================
-//  SubSplit Edge Function: payments-verify
+//  SplitSub Edge Function: payments-verify
 //  After Paystack sends the customer back, the website calls this with
 //  the payment reference. We ask PAYSTACK directly whether it succeeded
 //  (the browser's word is never trusted), then the database credits the

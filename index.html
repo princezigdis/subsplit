@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>SubSplit</title>
+<title>SplitSub</title>
 <meta name="description" content="Split premium subscriptions with verified hosts and pay only for your seat.">
 <meta name="theme-color" content="#5B5BD6">
 <link rel="icon" href="logo-mark.svg" type="image/svg+xml">
@@ -279,7 +279,7 @@ details.card ul{padding-left:18px;display:grid;gap:6px}
 <script src="api.js"></script>
 <script>
 /* =====================================================================
-   SubSplit customer app
+   SplitSub customer app
    ===================================================================== */
 const $ = (s, r = document) => r.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -339,7 +339,7 @@ const ICONS = {
 };
 const ic = (n, cls = '') => `<svg class="ic ${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[n] || ''}</svg>`;
 const LOGO = `<svg viewBox="0 0 40 40" aria-hidden="true"><rect width="40" height="40" rx="12" fill="var(--brand)"/><path d="M19 10a10 10 0 0 0 0 20z" fill="#fff"/><path d="M22 13a10 10 0 0 1 0 20z" fill="var(--accent)"/></svg>`;
-function wordmark(name){ const n = esc(name || 'SubSplit'), i = n.toLowerCase().lastIndexOf('split'); return i > 0 ? `${n.slice(0, i)}<b>${n.slice(i)}</b>` : n; }
+function wordmark(name){ const n = esc(name || 'SplitSub'), i = n.toLowerCase().indexOf('split'); return i >= 0 ? `${n.slice(0, i)}<b>${n.slice(i, i + 5)}</b>${n.slice(i + 5)}` : n; }
 function tile(o, big){
   const c = o.logo_color || '#5B5BD6';
   if (o.logo_url) return `<span class="tile ${big ? 'lg' : ''}" style="background:${esc(c)}"><img src="${esc(o.logo_url)}" alt=""></span>`;
@@ -355,7 +355,7 @@ const UI = {tab:'explore', cat:'All', q:'', sort:'popular', access:'ANY', verifi
 try { UI.hide = !!JSON.parse(localStorage.getItem('subsplit-ui') || '{}').hide; } catch(e){}
 const saveUI = () => { try { localStorage.setItem('subsplit-ui', JSON.stringify({hide:UI.hide})); } catch(e){} };
 const money = k => UI.hide ? '₦••••' : naira(k);
-const settings = () => (S.catalog && S.catalog.settings) || {site_name:'SubSplit', categories:[]};
+const settings = () => (S.catalog && S.catalog.settings) || {site_name:'SplitSub', categories:[]};
 const signedIn = () => !!S.me;
 const bal = () => (S.me && S.me.balances) || {};
 
@@ -377,7 +377,7 @@ async function loadAll(){
 }
 async function refresh(){
   try { await loadAll(); render(); }
-  catch(e){ app.innerHTML = `<div class="center-screen"><div class="empty" style="max-width:420px"><b>We couldn't load SubSplit</b><span>${esc(e.message)}</span><button class="btn primary" onclick="refresh()">Try again</button></div></div>`; }
+  catch(e){ app.innerHTML = `<div class="center-screen"><div class="empty" style="max-width:420px"><b>We couldn't load SplitSub</b><span>${esc(e.message)}</span><button class="btn primary" onclick="refresh()">Try again</button></div></div>`; }
 }
 
 /* ---------- top, nav ---------- */
@@ -519,7 +519,7 @@ function hostCard(l){
     <p class="sm muted">${l.seats_occupied} of ${l.seats_offered} seats taken</p>
     ${waiting ? `<p class="tip warn">${waiting} member${waiting > 1 ? 's are' : ' is'} waiting for access from you.</p>` : ''}
     ${openReports ? `<p class="tip warn">A member reported a problem. Please reply.</p>` : ''}
-    ${l.status === 'REJECTED' && l.review_note ? `<p class="tip">SubSplit: ${esc(l.review_note)}</p>` : ''}
+    ${l.status === 'REJECTED' && l.review_note ? `<p class="tip">SplitSub: ${esc(l.review_note)}</p>` : ''}
     ${l.proof_status === 'PENDING' ? `<p class="tip">${ic('clock')} Your proof of purchase is waiting for admin approval. The listing goes live only after it is approved.</p>` : ''}
     ${l.proof_status === 'REJECTED' ? `<p class="tip warn">Proof rejected${l.proof_reason ? ': ' + esc(l.proof_reason) : ''}. Upload a new one and resubmit.</p>` : ''}
     ${l.members.reduce((a, m) => a + (m.unread || 0), 0) ? `<p class="tip">${l.members.reduce((a, m) => a + (m.unread || 0), 0)} unread order message(s).</p>` : ''}
@@ -530,7 +530,7 @@ function signInPrompt(title, text){
   return `<div class="empty" style="margin-top:12px"><b>${title}</b><span>${text}</span><button class="btn primary" data-act="auth">Sign in or create account</button></div>`;
 }
 function ordersHTML(){
-  if (!S.orders.length) return `<div class="empty"><b>No orders yet</b><span>Every purchase gets an order chat with the host and SubSplit support.</span></div>`;
+  if (!S.orders.length) return `<div class="empty"><b>No orders yet</b><span>Every purchase gets an order chat with the host and SplitSub support.</span></div>`;
   const st = {ACTIVE:'<span class="pill good">Active</span>', COMPLETED:'<span class="pill good">Completed</span>', DISPUTED:'<span class="pill warn">Reported</span>', REFUNDED:'<span class="pill bad">Refunded</span>', PARTIALLY_REFUNDED:'<span class="pill neutral">Part refunded</span>'};
   return `<div class="list">${S.orders.map(o => `<div class="card tap" data-act="chat" data-id="${o.id}">
     <div class="row">${tile(o)}<div class="grow"><h3>${esc(o.service)}</h3><p class="muted sm">${o.role === 'BUYER' ? 'Host' : 'Member'} @${esc(o.counterparty)} · ${esc(o.txn_ref || '')}</p></div>${st[o.order_status] || ''}</div>
@@ -545,7 +545,7 @@ function viewMySubs(){
   const tabs = [['active','Active',current.length],['expiring','Expiring soon',expiring.length],['past','Past',past.length],['orders','Orders & chats',S.orders.length],['hosting','Shared by me',S.hosting.length]];
   const list = {active:current, expiring, past}[UI.subs];
   const body = UI.subs === 'orders' ? ordersHTML() : UI.subs === 'hosting'
-    ? (S.hosting.length ? `<div class="list">${S.hosting.map(hostCard).join('')}</div>` : `<div class="empty"><b>Earn from your empty seats</b><span>Share a family or team plan you already pay for. SubSplit sets fair prices for you.</span><button class="btn soft sm" data-act="create">Share a subscription</button></div>`)
+    ? (S.hosting.length ? `<div class="list">${S.hosting.map(hostCard).join('')}</div>` : `<div class="empty"><b>Earn from your empty seats</b><span>Share a family or team plan you already pay for. SplitSub sets fair prices for you.</span><button class="btn soft sm" data-act="create">Share a subscription</button></div>`)
     : (list.length ? `<div class="list">${list.map(subCard).join('')}</div>` : `<div class="empty"><b>${UI.subs === 'past' ? 'No past subscriptions' : UI.subs === 'expiring' ? 'Nothing ending soon' : "You haven't joined a plan yet"}</b>${UI.subs === 'active' ? `<button class="btn soft sm" data-act="tab" data-v="explore">Find a seat</button>` : ''}</div>`);
   return `
   <div class="ptitle"><h1>My Subs</h1><button class="btn primary sm" data-act="create">${ic('plus')} Share</button></div>
@@ -556,7 +556,7 @@ function viewMySubs(){
 /* ---------- Wallet ---------- */
 const TX = {TOP_UP:'Deposit', SUBSCRIPTION:'Purchase', PURCHASE_FEE:'Purchase fee', REFUND:'Refund', HOST_EARNING:'Escrow released', EARNING_REVERSED:'Earning reversed',
   WITHDRAWAL:'Withdrawal', WITHDRAWAL_FEE:'Withdrawal fee', WITHDRAWAL_REVERSED:'Withdrawal returned', TRANSFER_IN:'From earnings', TRANSFER_OUT:'Moved to wallet',
-  ADJUSTMENT:'Adjustment', ADMIN_CREDIT:'Credit from SubSplit', REFERRAL_REWARD:'Referral / promo reward'};
+  ADJUSTMENT:'Adjustment', ADMIN_CREDIT:'Credit from SplitSub', REFERRAL_REWARD:'Referral / promo reward'};
 const RECEIPT_TYPES = ['SUBSCRIPTION','PURCHASE_FEE','WITHDRAWAL','WITHDRAWAL_FEE'];
 function txRows(list){
   if (!list.length) return `<div class="empty"><span>No transactions yet.</span></div>`;
@@ -716,7 +716,7 @@ async function accessSheet(lid){
 
 function reportSheet(mid, fromChat){
   openSheet('Report a problem', `<form class="form" id="f-report" data-id="${mid}" data-chat="${fromChat ? 1 : ''}" novalidate>
-    <p class="muted">This alerts SubSplit support right away and puts the money for this order on hold while we look into it.</p>
+    <p class="muted">This alerts SplitSub support right away and puts the money for this order on hold while we look into it.</p>
     <div class="field"><label for="r-reason">What's wrong?</label><select id="r-reason">${REASONS.map(([k, l]) => `<option value="${k}">${l}</option>`).join('')}</select></div>
     <div class="field"><label for="r-text">Tell us more</label><textarea id="r-text" placeholder="e.g. The password was changed yesterday and I can't sign in."></textarea><small>At least 10 letters.</small></div>
     <button class="btn danger block" type="submit">Send alarm to support</button></form>`);
@@ -727,7 +727,7 @@ const CHAT = {id:null, timer:null, last:0};
 function stopChat(){ if (CHAT.timer){ clearInterval(CHAT.timer); CHAT.timer = null; } CHAT.id = null; }
 function msgHTML(m){
   const cls = m.role === 'SYSTEM' ? 'sys' : m.role === 'ADMIN' ? 'them adm' : m.mine ? 'me' : 'them';
-  const who = m.role === 'SYSTEM' || m.mine ? '' : `<b>${m.role === 'ADMIN' ? 'SubSplit support' : '@' + esc(m.sender)} <span class="xs muted">(${m.role.toLowerCase()})</span></b>\n`;
+  const who = m.role === 'SYSTEM' || m.mine ? '' : `<b>${m.role === 'ADMIN' ? 'SplitSub support' : '@' + esc(m.sender)} <span class="xs muted">(${m.role.toLowerCase()})</span></b>\n`;
   return `<div class="msg ${cls}">${who}${esc(m.body)}<br><span class="xs muted">${fmtDT(m.created_at)}</span></div>`;
 }
 async function chatSheet(mid, keepScroll){
@@ -748,7 +748,7 @@ async function chatSheet(mid, keepScroll){
       ${o.status === 'ACTIVE' ? `<button class="btn danger sm" data-act="report" data-id="${mid}" data-chat="1">${ic('bell')} Report a problem</button>` : ''}
     </div>
     ${o.dispute ? `<p class="tip">Report status: <b>${esc(o.dispute.status.replace('_', ' ').toLowerCase())}</b>${o.dispute.resolution ? ' · ' + esc(o.dispute.resolution.replace('_', ' ').toLowerCase()) : ''}</p>` : ''}
-    <p class="muted xs">SubSplit support can read this chat and step in if needed. Never share passwords for other accounts.</p>`);
+    <p class="muted xs">SplitSub support can read this chat and step in if needed. Never share passwords for other accounts.</p>`);
   const box = $('#chat-box'); box.scrollTop = box.scrollHeight;
   CHAT.last = c.messages.length ? c.messages[c.messages.length - 1].id : 0;
   CHAT.timer = setInterval(async () => {
@@ -812,7 +812,7 @@ function buildPDF(title, rows, brand){
 function downloadReceipt(){
   if (!RCPT) return;
   try {
-    const blob = buildPDF(RCPT.kind === 'PURCHASE' ? 'Purchase receipt' : 'Withdrawal receipt', rcptRows(RCPT), settings().site_name || 'SubSplit');
+    const blob = buildPDF(RCPT.kind === 'PURCHASE' ? 'Purchase receipt' : 'Withdrawal receipt', rcptRows(RCPT), settings().site_name || 'SplitSub');
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `receipt-${RCPT.txn_id}.pdf`;
     document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
   } catch(e){ printReceipt(); }
@@ -885,10 +885,10 @@ function renderCreate(){
     const a = ACCESS[p.access_type];
     body += `
     ${s.plans.length > 1 ? `<div class="field"><label for="h-plan">Plan</label><select id="h-plan">${s.plans.map(x => `<option value="${x.id}" ${x.id === p.id ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select></div>` : ''}
-    <div class="stepno"><i>2</i> SubSplit's rules for ${esc(s.name)} ${esc(p.name)}</div>
+    <div class="stepno"><i>2</i> SplitSub's rules for ${esc(s.name)} ${esc(p.name)}</div>
     <div class="kv">
       <div><span>Normal price</span><b class="num">${naira(p.normal_kobo)}</b></div>
-      <div><span>Seat limit</span><b>${p.max_seats} seats · set by SubSplit</b></div>
+      <div><span>Seat limit</span><b>${p.max_seats} seats · set by SplitSub</b></div>
       <div><span>Allowed markup</span><b>${locked ? p.min_markup_pct + '% (fixed)' : p.min_markup_pct + '% to ' + p.max_markup_pct + '%'}</b></div>
       <div><span>Access</span><b>${a.label}</b></div>
       <div><span>Period</span><b>${p.duration_days} days</b></div>
@@ -896,7 +896,7 @@ function renderCreate(){
     ${s.sharing_rules ? `<p class="tip">${esc(s.sharing_rules)}</p>` : ''}
     <div class="stepno"><i>3</i> Your markup and seats</div>
     ${locked ? `<p class="sm">Platform markup: <b>${p.min_markup_pct}%</b></p>` : `<div class="chips">${markups.map(m => `<button type="button" class="chip" data-act="hmark" data-v="${m}" aria-pressed="${m === H.markup}">${m}%</button>`).join('')}</div>`}
-    <div class="field"><label for="h-seats">Seats you will sell</label><select id="h-seats">${Array.from({length:p.max_seats}, (_, i) => i + 1).map(n => `<option ${n === H.seats ? 'selected' : ''}>${n}</option>`).join('')}</select><small>SubSplit allows up to ${p.max_seats}. The seat price stays the same whatever you choose.</small></div>
+    <div class="field"><label for="h-seats">Seats you will sell</label><select id="h-seats">${Array.from({length:p.max_seats}, (_, i) => i + 1).map(n => `<option ${n === H.seats ? 'selected' : ''}>${n}</option>`).join('')}</select><small>SplitSub allows up to ${p.max_seats}. The seat price stays the same whatever you choose.</small></div>
     <div class="stepno"><i>4</i> What you earn</div>
     <div class="kv">
       <div><span>Normal price</span><b class="num">${naira(p.normal_kobo)}</b></div>
@@ -907,7 +907,7 @@ function renderCreate(){
       <div class="total"><span>You earn per paid seat</span><b class="num">${naira(seat - feeK)}</b></div>
       <div><span>If all ${H.seats} seats are paid</span><b class="num">${naira((seat - feeK) * H.seats)}</b></div>
     </div>
-    <p class="muted xs">Final prices are calculated by SubSplit. Your share becomes available to withdraw when each member's ${p.duration_days}-day period ends.</p>
+    <p class="muted xs">Final prices are calculated by SplitSub. Your share becomes available to withdraw when each member's ${p.duration_days}-day period ends.</p>
     <form class="form" id="f-create" novalidate>
       <div class="stepno"><i>5</i> Access and proof</div>
       ${p.host_instructions ? `<p class="tip">${esc(p.host_instructions)}</p>` : ''}
@@ -915,14 +915,14 @@ function renderCreate(){
         <textarea id="h-access" placeholder="${p.access_type === 'LOGIN' ? 'Email: …\nPassword: …\nUse only the profile with your name.' : 'e.g. I send invites within 2 hours of payment.'}"></textarea>
         <small>Only members who have paid can see this. Never shown on Explore.</small></div>
       <div class="field"><label for="h-note">Note on your listing (optional)</label><input id="h-note" maxlength="300" placeholder="e.g. Please don't change the PIN"></div>
-      ${p.host_proof_required ? `<div class="field"><label for="h-proof">Proof you own this plan</label><input id="h-proof" type="file" accept="image/jpeg,image/png,image/webp,application/pdf"><small>A receipt or a screenshot of the subscription page. Max 5 MB. Only SubSplit sees it. Your listing goes live only after an admin approves it.</small></div>` : ''}
+      ${p.host_proof_required ? `<div class="field"><label for="h-proof">Proof you own this plan</label><input id="h-proof" type="file" accept="image/jpeg,image/png,image/webp,application/pdf"><small>A receipt or a screenshot of the subscription page. Max 5 MB. Only SplitSub sees it. Your listing goes live only after an admin approves it.</small></div>` : ''}
       <div class="field"><label for="h-proofnote">Anything we should know? (optional)</label><input id="h-proofnote" maxlength="500" placeholder="e.g. Renews on the 5th every month"></div>
       <label class="check"><input type="checkbox" id="h-own"> I own and pay for this plan, and I'll share it the way ${esc(s.name)} allows.</label>
       <label class="check"><input type="checkbox" id="h-agree"> <span>${esc(settings().agreement_text || 'I understand and agree that funds from this listing will be held in a 30-day escrow cycle before becoming available for withdrawal.')}</span></label>
       <button class="btn primary block" type="submit">Submit for review</button>
     </form>`;
   }
-  openSheet('Share a subscription', `<p class="muted sm">SubSplit sets the normal price and seat limit. You choose your markup and we calculate a fair seat price.</p>${body}`);
+  openSheet('Share a subscription', `<p class="muted sm">SplitSub sets the normal price and seat limit. You choose your markup and we calculate a fair seat price.</p>${body}`);
 }
 
 async function manageSheet(id){
@@ -936,12 +936,12 @@ async function manageSheet(id){
     <div class="row">${tile(l, true)}<div class="grow"><h3 style="font-size:20px">${esc(l.service)}</h3><p class="muted sm">${esc(l.plan)} · ${l.seats_occupied} of ${l.seats_offered} seats taken</p></div></div>
     ${needSubmit ? `<form class="form card" id="f-submit" data-id="${l.id}" novalidate style="box-shadow:none;background:var(--surface-2)">
        <h3>${l.status === 'REJECTED' ? 'Fix and resubmit' : 'Finish your listing'}</h3>
-       ${l.review_note ? `<p class="tip warn">SubSplit: ${esc(l.review_note)}</p>` : ''}
+       ${l.review_note ? `<p class="tip warn">SplitSub: ${esc(l.review_note)}</p>` : ''}
        ${l.host_proof_required ? `<div class="field"><label for="s-proof">Proof you own this plan</label><input id="s-proof" type="file" accept="image/jpeg,image/png,image/webp,application/pdf"><small>${l.proof_uploaded ? 'Proof already uploaded. Add a new file only to replace it.' : 'A receipt or screenshot. Max 5 MB.'}</small></div>` : ''}
-       <div class="field"><label for="s-note">Message to SubSplit (optional)</label><input id="s-note" value="${esc(l.proof_note)}"></div>
+       <div class="field"><label for="s-note">Message to SplitSub (optional)</label><input id="s-note" value="${esc(l.proof_note)}"></div>
        <label class="check"><input type="checkbox" id="s-agree"> <span>${esc(settings().agreement_text || 'I understand and agree that funds from this listing will be held in a 30-day escrow cycle before becoming available for withdrawal.')}</span></label>
        <button class="btn primary block" type="submit">Submit for review</button></form>` : ''}
-    ${l.status === 'PENDING_REVIEW' ? '<p class="tip">SubSplit is checking your listing. You will get a notification when it is live.</p>' : ''}
+    ${l.status === 'PENDING_REVIEW' ? '<p class="tip">SplitSub is checking your listing. You will get a notification when it is live.</p>' : ''}
     ${l.status === 'SUSPENDED' ? '<p class="tip warn">This listing is suspended. Please message support.</p>' : ''}
     <div class="sec-head"><h2 style="font-size:18px">Members</h2></div>
     ${live.length ? `<div class="rows-list">${live.map(m => `<div><span class="grow"><b class="sm">@${esc(m.buyer_username)}${m.buyer_name ? ' · ' + esc(m.buyer_name) : ''}</b>
@@ -952,11 +952,11 @@ async function manageSheet(id){
       : '<p class="muted sm">No members yet.</p>'}
     ${l.disputes.filter(d => d.status === 'OPEN' || d.status === 'IN_REVIEW').map(d => `<form class="form card" id="f-dreply" data-id="${d.id}" novalidate style="box-shadow:none;background:var(--warn-soft)">
        <b>A member needs help</b><p class="sm">“${esc(d.details)}”</p>
-       <div class="field"><label for="dr-${d.id}">Your reply to SubSplit</label><textarea id="dr-${d.id}" name="reply">${esc(d.host_response)}</textarea></div>
+       <div class="field"><label for="dr-${d.id}">Your reply to SplitSub</label><textarea id="dr-${d.id}" name="reply">${esc(d.host_response)}</textarea></div>
        <button class="btn primary sm" type="submit">Send reply</button></form>`).join('')}
     ${editable ? `<form class="form" id="f-manage" data-id="${l.id}" novalidate>
       <div class="sec-head"><h2 style="font-size:18px">Edit listing</h2></div>
-      <div class="kv"><div><span>Normal price</span><b class="num">${naira(l.normal_kobo)}</b></div><div><span>Seat limit</span><b>${l.max_seats} · set by SubSplit</b></div><div><span>Seat price now</span><b class="num">${naira(l.seat_kobo)}</b></div></div>
+      <div class="kv"><div><span>Normal price</span><b class="num">${naira(l.normal_kobo)}</b></div><div><span>Seat limit</span><b>${l.max_seats} · set by SplitSub</b></div><div><span>Seat price now</span><b class="num">${naira(l.seat_kobo)}</b></div></div>
       <div class="field"><span class="lbl2">Your markup</span><div class="chips">${markups.map(m => `<button type="button" class="chip" data-act="mmark" data-v="${m}" aria-pressed="${m === l.markup_pct}">${m}%</button>`).join('')}</div><input type="hidden" id="m-markup" value="${l.markup_pct}"></div>
       <div class="field"><label for="m-seats">Seats you sell</label><select id="m-seats">${Array.from({length:l.max_seats}, (_, i) => i + 1).filter(n => n >= Math.max(1, l.seats_occupied)).map(n => `<option ${n === l.seats_offered ? 'selected' : ''}>${n}</option>`).join('')}</select></div>
       <div class="field"><label for="m-access">${l.access_type === 'LOGIN' ? 'Login details' : 'Instructions for members'}</label><textarea id="m-access">${esc(l.access_details)}</textarea><small>Update this if you change the password. Only paying members see it.</small></div>
@@ -1049,7 +1049,7 @@ async function ticketsSheet(openId){
   try { S.tickets = await API.rpc('my_tickets'); } catch(e){ toast(e.message); return; }
   const t = openId && S.tickets.find(x => x.id === openId);
   if (t){
-    openSheet(esc(t.subject), `<div style="display:grid;gap:8px">${(t.messages || []).map(m => `<div class="msg ${m.from_admin ? 'them' : 'me'}">${m.from_admin ? '<b>SubSplit support</b>\n' : ''}${esc(m.body)}<br><span class="xs muted">${fmtDT(m.created_at)}</span></div>`).join('')}</div>
+    openSheet(esc(t.subject), `<div style="display:grid;gap:8px">${(t.messages || []).map(m => `<div class="msg ${m.from_admin ? 'them' : 'me'}">${m.from_admin ? '<b>SplitSub support</b>\n' : ''}${esc(m.body)}<br><span class="xs muted">${fmtDT(m.created_at)}</span></div>`).join('')}</div>
       ${t.status === 'CLOSED' ? '<p class="tip">This conversation is closed. Start a new message if you need more help.</p>' : `<form class="form" id="f-treply" data-id="${t.id}" novalidate><div class="field"><label for="tr-body">Reply</label><textarea id="tr-body"></textarea></div><button class="btn primary block" type="submit">Send</button></form>`}
       <button class="link" data-act="tickets">← All messages</button>`);
     return;
@@ -1094,7 +1094,7 @@ function render(){
   if (!S.catalog) return;
   const notice = settings().notice ? `<div class="notice">${esc(settings().notice)}</div>` : '';
   app.innerHTML = topBar() + `<main class="shell">${notice}${VIEWS[UI.tab]()}</main>` + nav();
-  document.title = settings().site_name || 'SubSplit';
+  document.title = settings().site_name || 'SplitSub';
   saveUI();
 }
 function go(tab){ UI.tab = tab; closeSheet(); render(); window.scrollTo(0, 0); }
@@ -1239,7 +1239,7 @@ document.addEventListener('submit', async e => {
       if (!/^\d{6,10}$/.test(code)){ toast('Enter the 6-digit code from your email.'); break; }
       if (!(await run(btn, () => API.verifyCode(em, code, type)))) break;
       if (type === 'recovery') passwordSheet('Choose a new password');
-      else { closeSheet(); toast('Email confirmed. Welcome to SubSplit!'); }
+      else { closeSheet(); toast('Email confirmed. Welcome to SplitSub!'); }
       break; }
     case 'f-pass': {
       const pw = val('np'); if (pw.length < 8){ toast('Use at least 8 characters.'); break; }
@@ -1331,7 +1331,7 @@ async function handlePaymentReturn(){
 
 (async function start(){
   if (!API.configured){
-    app.innerHTML = `<div class="center-screen"><div class="empty" style="max-width:440px"><b>SubSplit is not connected yet</b><span>Open <b>config.js</b> and add your Supabase URL and publishable key. See the setup guide.</span></div></div>`;
+    app.innerHTML = `<div class="center-screen"><div class="empty" style="max-width:440px"><b>SplitSub is not connected yet</b><span>Open <b>config.js</b> and add your Supabase URL and publishable key. See the setup guide.</span></div></div>`;
     return;
   }
   const back = API.consumeAuthRedirect();
@@ -1340,7 +1340,7 @@ async function handlePaymentReturn(){
   if (PENDING_REF && !S.me) authSheet('up');
   if (back && back.error) toast(back.error);
   else if (back && back.type === 'recovery') passwordSheet('Set a new password');
-  else if (back && back.type === 'signup') toast('Email confirmed. Welcome to SubSplit!');
+  else if (back && back.type === 'signup') toast('Email confirmed. Welcome to SplitSub!');
   await handlePaymentReturn();
   const plan = new URLSearchParams(location.search).get('plan');
   if (plan){ history.replaceState(null, '', location.pathname); UI.tab = 'explore'; render(); detailSheet(plan); }

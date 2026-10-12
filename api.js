@@ -1,5 +1,5 @@
 /* =====================================================================
-   SubSplit API client (shared by the customer app and the admin app)
+   SplitSub API client (shared by the customer app and the admin app)
    Talks to Supabase over HTTPS:
      /auth/v1       sign up, sign in, email codes, password reset
      /rest/v1/rpc   database functions (every rule is checked there)

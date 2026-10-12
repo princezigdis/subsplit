@@ -265,7 +265,7 @@ begin
   if length(p_name) < 2 then raise exception 'Type the name of the subscription you want.'; end if;
   if length(p_name) > 80 then raise exception 'That name is too long.'; end if;
   if exists (select 1 from services s join service_plans p on p.service_id = s.id where s.active and p.active and lower(s.name) = lower(p_name)) then
-    raise exception '% is already on SubSplit. Search for it on Explore.', p_name;
+    raise exception '% is already on SplitSub. Search for it on Explore.', p_name;
   end if;
   if exists (select 1 from subscription_requests where user_id = me.id and lower(service_name) = lower(p_name) and status in ('PENDING','IN_PROGRESS')) then
     raise exception 'You already asked for this one. We will tell you when it is added.';
@@ -274,7 +274,7 @@ begin
     raise exception 'You can send up to 5 requests a day. Please try again tomorrow.';
   end if;
   insert into subscription_requests (user_id, service_name, details) values (me.id, p_name, left(trim(coalesce(p_details, '')), 500)) returning id into v_id;
-  perform _notify_admins('ADMIN_ALERT', 'Subscription requested: ' || p_name, '@' || me.username || ' wants ' || p_name || ' on SubSplit.', v_id::text);
+  perform _notify_admins('ADMIN_ALERT', 'Subscription requested: ' || p_name, '@' || me.username || ' wants ' || p_name || ' on SplitSub.', v_id::text);
   perform _notify(me.id, 'REQUEST_RECEIVED', 'We got your request for ' || p_name, 'We will tell you as soon as it is added.', v_id::text);
   return jsonb_build_object('request_id', v_id);
 end $$;
@@ -315,7 +315,7 @@ begin
   update subscription_requests set status = v_new, admin_note = coalesce(nullif(trim(p_note), ''), admin_note),
     resolved_at = case when v_new in ('ADDED','DECLINED') then now() end where id = p_id;
   if v_new = 'ADDED' then
-    perform _notify(r.user_id, 'REQUEST_ADDED', r.service_name || ' is now on SubSplit', 'You asked for it, so you are the first to know. Open Explore to find it.', p_id::text);
+    perform _notify(r.user_id, 'REQUEST_ADDED', r.service_name || ' is now on SplitSub', 'You asked for it, so you are the first to know. Open Explore to find it.', p_id::text);
   elsif v_new = 'DECLINED' then
     perform _notify(r.user_id, 'REQUEST_DECLINED', 'About your ' || r.service_name || ' request', trim(p_note), p_id::text);
   elsif v_new = 'IN_PROGRESS' then
@@ -332,7 +332,7 @@ begin
   if new.active and (tg_op = 'INSERT' or not coalesce(old.active, false)) then
     for r in select * from subscription_requests where lower(service_name) = lower(new.name) and status in ('PENDING','IN_PROGRESS') for update loop
       update subscription_requests set status = 'ADDED', resolved_at = now(), admin_note = 'Added automatically' where id = r.id;
-      perform _notify(r.user_id, 'REQUEST_ADDED', new.name || ' is now on SubSplit', 'You asked for it, so you are the first to know. Open Explore to find it.', r.id::text);
+      perform _notify(r.user_id, 'REQUEST_ADDED', new.name || ' is now on SplitSub', 'You asked for it, so you are the first to know. Open Explore to find it.', r.id::text);
     end loop;
   end if;
   return new;
@@ -345,7 +345,7 @@ create or replace trigger service_added after insert or update of active on publ
 create or replace function public._credit_one(p_user uuid, p_amount bigint, p_reason text, p_ref text) returns void
 language plpgsql security definer set search_path = public as $$
 begin
-  perform _post(p_user, 'WALLET', 'ADMIN_CREDIT', p_amount, 'Credit from SubSplit: ' || p_reason, p_ref);
+  perform _post(p_user, 'WALLET', 'ADMIN_CREDIT', p_amount, 'Credit from SplitSub: ' || p_reason, p_ref);
   perform _post(null, 'PLATFORM', 'ADMIN_CREDIT', -p_amount, 'Credit to user: ' || p_reason, p_ref);
   perform _notify(p_user, 'ADMIN_CREDIT', _naira(p_amount) || ' added to your wallet', p_reason);
 end $$;

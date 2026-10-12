@@ -135,7 +135,7 @@ CREATE OR REPLACE FUNCTION public.admin_ledger(p_type text DEFAULT NULL::text)
 AS $function$
 begin
   perform _need_admin();
-  return coalesce((select jsonb_agg(jsonb_build_object('id', t.id, 'user', coalesce(p.username, 'SubSplit'), 'account', t.account_kind, 'type', t.type,
+  return coalesce((select jsonb_agg(jsonb_build_object('id', t.id, 'user', coalesce(p.username, 'SplitSub'), 'account', t.account_kind, 'type', t.type,
       'amount_kobo', t.amount_kobo, 'balance_after_kobo', t.balance_after_kobo, 'description', t.description, 'reference', t.reference,
       'created_at', t.created_at) order by t.id desc)
     from (select * from wallet_transactions where p_type is null or p_type = '' or type = p_type order by id desc limit 300) t
@@ -214,7 +214,7 @@ begin
     raise exception using message = format('Markup for %s must be between %s%% and %s%%.', s.name, p.min_markup_pct, p.max_markup_pct);
   end if;
   if p_seats is null or p_seats < 1 or p_seats > p.max_seats then
-    raise exception 'SubSplit allows up to % seats for % %.', p.max_seats, s.name, p.name;
+    raise exception 'SplitSub allows up to % seats for % %.', p.max_seats, s.name, p.name;
   end if;
   if p.access_type = 'LOGIN' and length(trim(coalesce(p_access, ''))) < 5 then
     raise exception 'Add the login details members will use. Only paying members can see them.';

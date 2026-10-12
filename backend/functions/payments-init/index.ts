@@ -1,5 +1,5 @@
 // =====================================================================
-//  SubSplit Edge Function: payments-init
+//  SplitSub Edge Function: payments-init
 //  Starts a Paystack payment. The AMOUNT is decided by the database,
 //  never by the browser:
 //    TOPUP -> amount checked against the platform's min/max

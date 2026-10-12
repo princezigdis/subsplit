@@ -29,7 +29,7 @@ language sql immutable as $$ select 1000 $$;
 -- ---------------------------------------------------------------------
 create table if not exists public.platform_settings (
   id int primary key default 1 check (id = 1),
-  site_name text not null default 'SubSplit',
+  site_name text not null default 'SplitSub',
   hero_title text not null default 'Split premium subscriptions. Pay only for your seat.',
   hero_text text not null default 'Join verified groups for streaming, music, software, data and more. Or earn from the empty seats on your own plan.',
   notice text not null default '',
@@ -164,7 +164,7 @@ create unique index if not exists memberships_one_live_seat
   on public.memberships (listing_id, buyer_id) where status in ('ACTIVE','DISPUTED') and not renewed;
 
 -- Ledger accounts. WALLET = money to spend. EARNINGS = host money ready to withdraw.
--- PENDING = host money waiting for the cycle to end. PLATFORM = SubSplit's 10% fees.
+-- PENDING = host money waiting for the cycle to end. PLATFORM = SplitSub's 10% fees.
 create table if not exists public.wallet_accounts (
   id uuid primary key default gen_random_uuid(),
   owner_id uuid references public.profiles(id) on delete restrict,
@@ -305,7 +305,7 @@ create or replace function public._need_admin() returns void
 language plpgsql stable security definer set search_path = public as $$
 begin
   if auth.uid() is null or not is_admin() then
-    raise exception using errcode = '42501', message = 'Access denied. This area is for SubSplit admins only.';
+    raise exception using errcode = '42501', message = 'Access denied. This area is for SplitSub admins only.';
   end if;
 end $$;
 
@@ -832,7 +832,7 @@ begin
     raise exception using message = format('Markup for %s must be between %s%% and %s%%.', s.name, p.min_markup_pct, p.max_markup_pct);
   end if;
   if p_seats is null or p_seats < 1 or p_seats > p.max_seats then
-    raise exception 'SubSplit allows up to % seats for % %.', p.max_seats, s.name, p.name;
+    raise exception 'SplitSub allows up to % seats for % %.', p.max_seats, s.name, p.name;
   end if;
   if p.access_type = 'LOGIN' and length(trim(coalesce(p_access, ''))) < 5 then
     raise exception 'Add the login details members will use. Only paying members can see them.';
@@ -1385,7 +1385,7 @@ create or replace function public.admin_release(p_id uuid, p_note text default '
 language plpgsql security definer set search_path = public as $$
 begin
   perform _need_admin();
-  perform _release(p_id, 'released by SubSplit');
+  perform _release(p_id, 'released by SplitSub');
   update disputes set status = 'RESOLVED', resolution = 'RELEASE', admin_note = coalesce(nullif(p_note, ''), admin_note),
     resolved_by = auth.uid(), resolved_at = now(), updated_at = now() where membership_id = p_id and status in ('OPEN','IN_REVIEW');
   perform _audit('RELEASE_PAYMENT', 'membership', p_id::text, null, null, p_note);
@@ -1421,7 +1421,7 @@ create or replace function public.admin_ledger(p_type text default null) returns
 language plpgsql security definer set search_path = public as $$
 begin
   perform _need_admin();
-  return coalesce((select jsonb_agg(jsonb_build_object('id', t.id, 'user', coalesce(p.username, 'SubSplit'), 'account', t.account_kind, 'type', t.type,
+  return coalesce((select jsonb_agg(jsonb_build_object('id', t.id, 'user', coalesce(p.username, 'SplitSub'), 'account', t.account_kind, 'type', t.type,
       'amount_kobo', t.amount_kobo, 'balance_after_kobo', t.balance_after_kobo, 'description', t.description, 'reference', t.reference,
       'created_at', t.created_at) order by t.id desc)
     from (select * from wallet_transactions where p_type is null or p_type = '' or type = p_type order by id desc limit 300) t

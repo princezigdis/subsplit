@@ -1,6 +1,6 @@
-# SubSplit — production structure
+# SplitSub — production structure
 
-A subscription-sharing marketplace for Nigeria (₦). Customers join seats on family/team plans; hosts share plans they own; SubSplit controls prices, seats, markup and the 10% fee; a separate admin dashboard runs the marketplace.
+A subscription-sharing marketplace for Nigeria (₦). Customers join seats on family/team plans; hosts share plans they own; SplitSub controls prices, seats, markup and the 10% fee; a separate admin dashboard runs the marketplace.
 
 **Status:** the code is complete and tested locally (see "Tests"). It is **not live yet**. It goes live after the setup steps below. These need your own accounts: Supabase, Paystack, hosting and a domain.
 

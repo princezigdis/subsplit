@@ -1,5 +1,5 @@
 -- =====================================================================
---  SubSplit security + money tests. Runs against a database built from
+--  SplitSub security + money tests. Runs against a database built from
 --  database/*.sql plus tests/supabase_stub.sql. Every check acts as a
 --  real signed-in user (role "authenticated" + their user id).
 --  Output: one PASS/FAIL line per check.
@@ -365,7 +365,7 @@ select t.ok('R16 Member sees own referral code', (my_referrals() ->> 'code') is 
 -- subscription requests
 set "request.jwt.claim.sub" = :'C';
 select t.err('Q1 Request needs a name', 'select suggest_subscription('' '')', '%Type the name%');
-select t.err('Q2 Existing service is not requested again', 'select suggest_subscription(''Netflix'')', '%already on SubSplit%');
+select t.err('Q2 Existing service is not requested again', 'select suggest_subscription(''Netflix'')', '%already on SplitSub%');
 select t.ok('Q3 User can request a missing subscription', suggest_subscription('Disney Plus', 'Family plan') ? 'request_id');
 select t.err('Q4 Duplicate request refused', 'select suggest_subscription(''disney plus'')', '%already asked%');
 select t.ok('Q5 User sees own request status', (my_requests() -> 0 ->> 'status') = 'PENDING');

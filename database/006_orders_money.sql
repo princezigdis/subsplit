@@ -724,7 +724,7 @@ begin
     if m.payment_reference is not null then
       select channel into v_chan from payments where reference = m.payment_reference;
       v_method := 'Paystack' || case when coalesce(v_chan, '') <> '' then ' (' || v_chan || ')' else '' end;
-    else v_method := 'SubSplit wallet'; end if;
+    else v_method := 'SplitSub wallet'; end if;
     return jsonb_build_object('kind', 'PURCHASE', 'txn_id', m.txn_ref, 'created_at', m.created_at,
       'user', jsonb_build_object('name', u.full_name, 'username', u.username, 'email', u.email),
       'item', v_item, 'host', v_host, 'period_start', m.starts_at, 'period_end', m.ends_at,
@@ -791,7 +791,7 @@ $$;
 create or replace function public._chat_json(p_membership uuid, p_me uuid) returns jsonb
 language sql stable security definer set search_path = public as $$
   select coalesce(jsonb_agg(jsonb_build_object('id', x.id, 'role', x.sender_role,
-      'sender', case x.sender_role when 'ADMIN' then 'SubSplit support' when 'SYSTEM' then 'SubSplit' else coalesce(pr.username, 'user') end,
+      'sender', case x.sender_role when 'ADMIN' then 'SplitSub support' when 'SYSTEM' then 'SplitSub' else coalesce(pr.username, 'user') end,
       'body', x.body, 'created_at', x.created_at, 'mine', x.sender_id is not distinct from p_me and x.sender_id is not null) order by x.id), '[]'::jsonb)
   from (select * from order_messages where membership_id = p_membership order by id desc limit 300) x
   left join profiles pr on pr.id = x.sender_id;
@@ -897,7 +897,7 @@ begin
   perform _notify(v_other, 'DISPUTE_OPENED', 'A report was opened on your ' || v_service || ' order',
     case when v_role = 'BUYER' then 'The member needs help. Please reply in the order chat.' else 'The host reported a problem. Support will review it.' end, m.id::text);
   perform _notify_admins('ADMIN_ALERT', 'Distress alarm: ' || v_service || ' order', 'Raised by the ' || lower(v_role) || ' @' || me.username || ' (' || p_reason || ').', v_id::text);
-  perform _chat_system(m.id, 'Report opened by the ' || lower(v_role) || ' (' || replace(lower(p_reason), '_', ' ') || '). SubSplit support has been alerted and the money for this order is on hold.');
+  perform _chat_system(m.id, 'Report opened by the ' || lower(v_role) || ' (' || replace(lower(p_reason), '_', ' ') || '). SplitSub support has been alerted and the money for this order is on hold.');
   return jsonb_build_object('dispute_id', v_id);
 end $$;
 
@@ -908,7 +908,7 @@ create or replace function public._dispute_closed_note() returns trigger
 language plpgsql security definer set search_path = public as $$
 begin
   if old.status in ('OPEN','IN_REVIEW') and new.status in ('RESOLVED','CLOSED') then
-    perform _chat_system(new.membership_id, 'Report resolved by SubSplit support' ||
+    perform _chat_system(new.membership_id, 'Report resolved by SplitSub support' ||
       case new.resolution when 'REFUND' then ': the member was refunded in full.' when 'PARTIAL_REFUND' then ': the member got a partial refund.'
         when 'RELEASE' then ': the host was paid.' else '.' end);
   end if;
@@ -953,8 +953,8 @@ begin
   if not found then raise exception 'Order not found.'; end if;
   insert into order_messages (membership_id, sender_id, sender_role, body) values (p_membership, auth.uid(), 'ADMIN', left(p_body, 2000));
   select s.name into v_service from service_plans p join services s on s.id = p.service_id where p.id = m.plan_id;
-  perform _notify(m.buyer_id, 'ORDER_MESSAGE', 'SubSplit support wrote about your ' || v_service || ' order', left(p_body, 100), p_membership::text);
-  perform _notify(m.host_id, 'ORDER_MESSAGE', 'SubSplit support wrote about a ' || v_service || ' order', left(p_body, 100), p_membership::text);
+  perform _notify(m.buyer_id, 'ORDER_MESSAGE', 'SplitSub support wrote about your ' || v_service || ' order', left(p_body, 100), p_membership::text);
+  perform _notify(m.host_id, 'ORDER_MESSAGE', 'SplitSub support wrote about a ' || v_service || ' order', left(p_body, 100), p_membership::text);
   perform _audit('ORDER_CHAT_MESSAGE', 'membership', p_membership::text, null, null, left(p_body, 200));
 end $$;
 

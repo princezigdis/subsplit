@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>SubSplit Admin</title>
+<title>SplitSub Admin</title>
 <meta name="robots" content="noindex, nofollow">
 <meta name="theme-color" content="#17172B">
 <link rel="icon" href="../logo-mark.svg" type="image/svg+xml">
@@ -146,7 +146,7 @@ textarea{min-height:80px;resize:vertical}
 <script src="../api.js"></script>
 <script>
 /* =====================================================================
-   SubSplit Admin
+   SplitSub Admin
    ===================================================================== */
 const $ = (s, r = document) => r.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -200,15 +200,15 @@ async function copyText(t){ try { await navigator.clipboard.writeText(t); toast(
 /* ---------- sign-in + admin check ---------- */
 function loginScreen(msg){
   app.innerHTML = `<div class="center"><form class="login" id="f-login" novalidate>
-    <div class="row">${LOGO.replace('<svg', '<svg style="width:36px;height:36px"')}<div><h2>SubSplit Admin</h2><p class="muted sm">Admins only</p></div></div>
+    <div class="row">${LOGO.replace('<svg', '<svg style="width:36px;height:36px"')}<div><h2>SplitSub Admin</h2><p class="muted sm">Admins only</p></div></div>
     ${msg ? `<p class="tip bad">${esc(msg)}</p>` : ''}
     <div class="field"><label for="l-email">Email</label><input id="l-email" type="email" autocomplete="username" autocapitalize="none"></div>
     <div class="field"><label for="l-pass">Password</label><input id="l-pass" type="password" autocomplete="current-password"></div>
     <button class="btn primary block" type="submit">Sign in</button></form></div>`;
 }
 function deniedScreen(){
-  app.innerHTML = `<div class="center"><div class="login"><h2>Access denied</h2><p class="muted">This account is not a SubSplit admin. Admin access can only be given by an existing admin.</p>
-    <a class="btn primary block" href="../">Go to SubSplit</a><button class="btn line block" data-act="logout">Sign out</button></div></div>`;
+  app.innerHTML = `<div class="center"><div class="login"><h2>Access denied</h2><p class="muted">This account is not a SplitSub admin. Admin access can only be given by an existing admin.</p>
+    <a class="btn primary block" href="../">Go to SplitSub</a><button class="btn line block" data-act="logout">Sign out</button></div></div>`;
 }
 async function boot(){
   if (!API.configured){ app.innerHTML = `<div class="center"><div class="login"><h2>Not connected</h2><p class="muted">Add your Supabase URL and publishable key to config.js.</p></div></div>`; return; }
@@ -226,7 +226,7 @@ function shell(inner){
   const b = badges();
   const navBtn = ([k, l, i]) => `<button class="nav" data-act="go" data-v="${k}" ${page === k ? 'aria-current="page"' : ''}>${ic(i)}<span>${l}</span>${b[k] ? `<span class="badge">${b[k]}</span>` : ''}</button>`;
   return `<div class="layout">
-    <aside class="side">${`<div class="brandline">${LOGO}<span>SubSplit<small>Admin</small></span></div>`}${PAGES.map(navBtn).join('')}
+    <aside class="side">${`<div class="brandline">${LOGO}<span>SplitSub<small>Admin</small></span></div>`}${PAGES.map(navBtn).join('')}
       <div class="who"><span>@${esc(ME.username)}</span><button class="btn sm line" style="color:var(--side-ink);border-color:rgba(255,255,255,.15)" data-act="logout">${ic('out')} Sign out</button></div></aside>
     <div style="min-width:0"><div class="topnav"><div class="bar1"><div class="brandline" style="padding:0">${LOGO}<span>Admin</span></div><button class="btn sm line" style="color:var(--side-ink);border-color:rgba(255,255,255,.15)" data-act="logout">Sign out</button></div>
       <div class="tabs-x">${PAGES.map(navBtn).join('')}</div></div>
@@ -327,7 +327,7 @@ const PAGE = {
     const [bad, list] = await Promise.all([API.rpc('admin_ledger_check'), API.rpc('admin_ledger', {p_type:filter.type || ''})]);
     const types = ['','TOP_UP','SUBSCRIPTION','PURCHASE_FEE','HOST_EARNING_PENDING','PENDING_RELEASED','HOST_EARNING','PLATFORM_FEE','REFUND','EARNING_REVERSED','WITHDRAWAL','WITHDRAWAL_FEE','WITHDRAWAL_REVERSED','TRANSFER_IN','TRANSFER_OUT','ADJUSTMENT','ADMIN_CREDIT','REFERRAL_REWARD'];
     return `<div class="ptitle"><h1>Wallet ledger</h1><select id="ledger-type" style="max-width:240px">${types.map(t => `<option value="${t}" ${t === (filter.type || '') ? 'selected' : ''}>${t ? t.replace(/_/g, ' ').toLowerCase() : 'All types'}</option>`).join('')}</select></div>
-    ${bad.length ? `<div class="tip bad"><b>${bad.length} account(s) don't match their ledger.</b> ${bad.map(b => `@${esc(b.owner || 'SubSplit')} ${b.kind}: balance ${naira(b.balance_kobo)} vs ledger ${naira(b.ledger_kobo)}`).join('; ')}</div>` : `<p class="tip good">Every balance matches its ledger.</p>`}
+    ${bad.length ? `<div class="tip bad"><b>${bad.length} account(s) don't match their ledger.</b> ${bad.map(b => `@${esc(b.owner || 'SplitSub')} ${b.kind}: balance ${naira(b.balance_kobo)} vs ledger ${naira(b.ledger_kobo)}`).join('; ')}</div>` : `<p class="tip good">Every balance matches its ledger.</p>`}
     <p class="tip">Every balance change is a row here. Balances are never edited directly. To correct one, use Users → Adjust balance (it adds a ledger row and an audit log).</p>
     <div class="rows">${list.length ? list.map(t => `<div><span class="grow"><b>${esc(t.type.replace(/_/g, ' ').toLowerCase())}</b> <span class="muted sm">@${esc(t.user)} · ${esc(t.account.toLowerCase())}</span><br><span class="muted xs">${esc(t.description)} · ${esc(t.reference)} · ${fmtDT(t.created_at)}</span></span>
       <span class="amt num ${t.amount_kobo > 0 ? 'in' : 'out'}">${t.amount_kobo > 0 ? '+' : '−'}${naira(Math.abs(t.amount_kobo))}<br><span class="muted xs">bal ${naira(t.balance_after_kobo)}</span></span></div>`).join('') : '<div><span class="muted">No entries.</span></div>'}</div>`;
@@ -531,14 +531,14 @@ function txnView(r){
     ${pay ? `<h3>Payment</h3><div class="kv"><div><span>Reference</span><b>${esc(pay.reference)}</b></div><div><span>Amount · paid</span><b class="num">${naira(pay.amount_kobo)} · ${pay.paid_kobo != null ? naira(pay.paid_kobo) : '—'}</b></div><div><span>Status · channel</span><b>${esc(pay.status.toLowerCase())} · ${esc(pay.channel || '—')}</b></div><div><span>Created · verified</span><b>${fmtDT(pay.created_at)} · ${fmtDT(pay.verified_at)}</b></div>${pay.note ? `<div><span>Note</span><b>${esc(pay.note)}</b></div>` : ''}</div>` : ''}
     ${w ? `<h3>Withdrawal</h3><div class="kv"><div><span>Requested</span><b class="num">${naira(w.amount_kobo)}</b></div><div><span>Fee</span><b class="num">${naira(w.fee_kobo)}</b></div><div><span>Payout</span><b class="num">${naira(w.payout_kobo ?? w.amount_kobo)}</b></div><div><span>Bank</span><b>${esc(w.bank_name)} · ${esc(w.account_number)} · ${esc(w.account_name)}</b></div><div><span>Status</span><b>${esc(w.status.toLowerCase())}</b></div><div><span>Requested · paid</span><b>${fmtDT(w.created_at)} · ${fmtDT(w.paid_at)}</b></div>${w.admin_note ? `<div><span>Admin note</span><b>${esc(w.admin_note)}</b></div>` : ''}</div>` : ''}
     ${(r.disputes || []).length ? `<h3>Reports</h3><div class="rows">${r.disputes.map(d => `<div><span class="grow sm">${esc(d.reason)} · raised by ${esc((d.raised_by_role || '').toLowerCase())}<br><span class="muted xs">${fmtDT(d.created_at)}${d.resolution ? ' · ' + esc(d.resolution) : ''}</span></span>${pill(DST, d.status)}</div>`).join('')}</div>` : ''}
-    <h3>Wallet movements</h3><div class="rows">${r.ledger.length ? r.ledger.map(t => `<div><span class="grow sm"><b>${esc(t.type.replace(/_/g, ' ').toLowerCase())}</b> · @${esc(t.user || 'SubSplit')} · ${esc(t.account.toLowerCase())}<br><span class="muted xs">${esc(t.description)} · ${esc(t.reference)} · ${fmtDT(t.created_at)}</span></span><span class="amt num ${t.amount_kobo > 0 ? 'in' : 'out'}">${t.amount_kobo > 0 ? '+' : '−'}${naira(Math.abs(t.amount_kobo))}</span></div>`).join('') : '<div><span class="muted">No wallet movements.</span></div>'}</div>
+    <h3>Wallet movements</h3><div class="rows">${r.ledger.length ? r.ledger.map(t => `<div><span class="grow sm"><b>${esc(t.type.replace(/_/g, ' ').toLowerCase())}</b> · @${esc(t.user || 'SplitSub')} · ${esc(t.account.toLowerCase())}<br><span class="muted xs">${esc(t.description)} · ${esc(t.reference)} · ${fmtDT(t.created_at)}</span></span><span class="amt num ${t.amount_kobo > 0 ? 'in' : 'out'}">${t.amount_kobo > 0 ? '+' : '−'}${naira(Math.abs(t.amount_kobo))}</span></div>`).join('') : '<div><span class="muted">No wallet movements.</span></div>'}</div>
     ${r.receipt ? `<h3>Receipt</h3><div class="kv"><div><span>Receipt for</span><b>${esc(r.receipt.txn_id)} · ${esc(r.receipt.kind.toLowerCase())}</b></div><div><span>Total</span><b class="num">${naira(r.receipt.total_kobo)}</b></div><div><span>Method · status</span><b>${esc(r.receipt.method)} · ${esc(r.receipt.status)}</b></div></div>` : ''}
     <h3>Admin actions & audit</h3><div class="rows">${r.audit.length ? r.audit.map(a => `<div><span class="grow sm"><b>${esc(a.action.replace(/_/g, ' ').toLowerCase())}</b> by @${esc(a.admin || 'system')}<br><span class="muted xs">${esc(a.note || '')} · ${fmtDT(a.created_at)}</span></span></div>`).join('') : '<div><span class="muted">No admin actions recorded.</span></div>'}</div></div>`;
 }
 async function findTx(ref){ try { cache.search = await API.rpc('admin_txn_search', {p_ref:ref}); filter.sq = ref; closeSheet(); await show('search', true); } catch(e){ toast(e.message); } }
 function achatMsg(m){
   const cls = m.role === 'SYSTEM' ? 'user' : m.role === 'ADMIN' ? 'admin' : 'user';
-  return `<div class="msg ${cls}" ${m.role === 'SYSTEM' ? 'style="opacity:.75;font-style:italic"' : ''}><b class="sm">${m.role === 'SYSTEM' ? 'SubSplit' : m.role === 'ADMIN' ? 'Support' : '@' + esc(m.sender) + ' (' + m.role.toLowerCase() + ')'}</b><br>${esc(m.body)}<br><span class="muted xs">${fmtDT(m.created_at)}</span></div>`;
+  return `<div class="msg ${cls}" ${m.role === 'SYSTEM' ? 'style="opacity:.75;font-style:italic"' : ''}><b class="sm">${m.role === 'SYSTEM' ? 'SplitSub' : m.role === 'ADMIN' ? 'Support' : '@' + esc(m.sender) + ' (' + m.role.toLowerCase() + ')'}</b><br>${esc(m.body)}<br><span class="muted xs">${fmtDT(m.created_at)}</span></div>`;
 }
 async function chatSheet(mid){
   let c; try { c = await API.rpc('admin_order_chat', {p_membership:mid}); } catch(e){ toast(e.message); return; }
