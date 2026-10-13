@@ -397,7 +397,7 @@ function nav(){
 }
 function foot(){
   const s = settings();
-  return `<div class="foot"><span>© ${new Date().getFullYear()} ${esc(s.site_name)}</span>${waUrl() ? `<a href="${esc(waUrl())}" target="_blank" rel="noopener">Chat with support on WhatsApp</a>` : ''}${s.support_email ? `<span>${esc(s.support_email)}</span>` : ''}</div>`;
+  return `<div class="foot"><span>© ${new Date().getFullYear()} ${esc(s.site_name)}</span>${waUrl() ? `<a href="${esc(waUrl())}" target="_blank" rel="noopener">Chat with support on WhatsApp</a>` : ''}${s.support_email ? `<span>${esc(s.support_email)}</span>` : ''}<a href="https://whatsapp.com/channel/0029Vb93ZqsInlqXiLFPBM1U" target="_blank" rel="noopener">Join our WhatsApp channel</a><span><a href="/terms.html" target="_blank" rel="noopener">Terms</a> · <a href="/privacy.html" target="_blank" rel="noopener">Privacy</a> · <a href="/user-policy.html" target="_blank" rel="noopener">User policy</a> · <a href="/refund-policy.html" target="_blank" rel="noopener">Refunds</a></span></div>`;
 }
 
 /* ---------- Explore ---------- */
@@ -978,7 +978,7 @@ function authSheet(mode = 'in'){
       <div class="field"><label for="a-email">Email</label><input id="a-email" type="email" autocomplete="email" inputmode="email" autocapitalize="none"></div>
       <div class="field"><label for="a-pass">Password</label><input id="a-pass" type="password" autocomplete="${up ? 'new-password' : 'current-password'}" placeholder="${up ? 'At least 8 characters' : ''}"></div>
       <button class="btn primary block" type="submit">${up ? 'Create account' : 'Sign in'}</button>
-      ${up ? '' : '<button class="link" type="button" data-act="forgot">Forgot your password?</button>'}
+      ${up ? '<p class="muted xs" style="text-align:center">By creating an account you agree to our <a href="/terms.html" target="_blank" rel="noopener">Terms</a>, <a href="/privacy.html" target="_blank" rel="noopener">Privacy Policy</a> and <a href="/user-policy.html" target="_blank" rel="noopener">User Policy</a>.</p>' : '<button class="link" type="button" data-act="forgot">Forgot your password?</button>'}
     </form>`);
 }
 function passwordSheet(title){

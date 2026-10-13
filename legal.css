@@ -1,0 +1,30 @@
+:root{--bg:#F6F6FB;--surface:#fff;--ink:#17172B;--muted:#6B6B85;--line:#E6E6F0;--brand:#5B5BD6;--brand-soft:#ECECFD;--brand-strong:#3F3FB0;--accent-soft:#FFF1D9;--accent-ink:#7A4A00}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0F0F1A;--surface:#181826;--ink:#ECECF6;--muted:#9C9CB8;--line:#2B2B42;--brand:#8B8BFF;--brand-soft:#252550;--brand-strong:#BDBDFF;--accent-soft:#3A2C12;--accent-ink:#FFD79A}}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.65 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+.wrap{max-width:720px;margin:0 auto;padding:0 16px 48px}
+header.top{display:flex;align-items:center;gap:10px;padding:16px 0}
+header.top a{display:flex;align-items:center;gap:10px;color:var(--ink);text-decoration:none;font-weight:800;font-size:19px}
+header.top img{width:34px;height:34px;border-radius:9px}
+header.top b{color:var(--brand)}
+h1{font-size:28px;line-height:1.2;margin:8px 0 4px;letter-spacing:-.01em}
+h2{font-size:19px;margin:30px 0 6px}
+p,li{color:var(--ink)}
+p{margin:8px 0}
+ul,ol{padding-left:22px;margin:8px 0}
+li{margin:4px 0}
+.meta{color:var(--muted);font-size:14px;margin:0 0 14px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:16px 18px;margin:16px 0}
+.note{background:var(--accent-soft);color:var(--accent-ink);border-radius:14px;padding:12px 16px;margin:16px 0;font-size:15px}
+.note p,.note li{color:inherit}
+table{width:100%;border-collapse:collapse;font-size:15px}
+th,td{text-align:left;padding:9px 6px;border-bottom:1px solid var(--line)}
+th{color:var(--muted);font-weight:600;font-size:13px}
+td:last-child,th:last-child{text-align:right}
+a{color:var(--brand-strong)}
+.btns{display:flex;flex-wrap:wrap;gap:10px;margin:12px 0}
+.btn{display:inline-block;padding:11px 16px;border-radius:12px;background:var(--brand);color:#fff;text-decoration:none;font-weight:700;font-size:15px}
+.btn.alt{background:var(--brand-soft);color:var(--brand-strong)}
+nav.legal{display:flex;flex-wrap:wrap;gap:6px 14px;margin:28px 0 8px;padding-top:16px;border-top:1px solid var(--line);font-size:14px}
+footer{color:var(--muted);font-size:13px}
