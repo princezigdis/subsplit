@@ -439,6 +439,19 @@ select t.ok('M2 Second run sends no duplicates', send_expiry_reminders() = 0);
 reset role;
 select t.ok('M3 Host got an expiry notice', exists (select 1 from notifications where user_id = :'H2' and type = 'EXPIRING_HOST'));
 
+-- ---------- Tiered withdrawal fee (009) ----------
+select t.ok('W1 N2,999.99 -> N200 flat', _withdrawal_fee_for(299999) = 20000);
+select t.ok('W2 N1,000 -> N200 flat', _withdrawal_fee_for(100000) = 20000);
+select t.ok('W3 N3,000.00 -> 8% = N240', _withdrawal_fee_for(300000) = 24000);
+select t.ok('W4 N50,000.00 -> 8% = N4,000', _withdrawal_fee_for(5000000) = 400000);
+select t.ok('W5 N50,000.01 -> 9%', _withdrawal_fee_for(5000001) = 450000);
+select t.ok('W6 N200,000.00 -> 9% = N18,000', _withdrawal_fee_for(20000000) = 1800000);
+select t.ok('W7 N200,000.01 -> 10%', _withdrawal_fee_for(20000001) = 2000000);
+select t.ok('W8 N300,000.00 -> 10% = N30,000', _withdrawal_fee_for(30000000) = 3000000);
+select t.ok('W9 N300,000.01 -> 10.19%', _withdrawal_fee_for(30000001) = 3057000);
+select t.ok('W10 N500,000.00 -> 10.19% = N50,950', _withdrawal_fee_for(50000000) = 5095000);
+select t.ok('W11 Fee function is not callable by users', not has_function_privilege('authenticated', '_withdrawal_fee_for(bigint)', 'execute'));
+
 \echo
 select case when ok then 'PASS' else 'FAIL' end as result, name, case when ok then '' else detail end as detail from t.results order by n;
 select count(*) filter (where ok) as passed, count(*) filter (where not ok) as failed from t.results;

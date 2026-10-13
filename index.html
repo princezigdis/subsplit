@@ -307,7 +307,7 @@ const ACCESS = {
 };
 const needsContact = t => t !== 'LOGIN';
 const FEE = () => settings().buyer_fee_kobo || 20000;
-const WFEE = () => settings().withdrawal_fee_kobo || 20000;
+const WFEE = (k) => !(k > 0) ? (settings().withdrawal_fee_kobo || 20000) : k < 300000 ? 20000 : Math.floor((k * (k <= 5000000 ? 800 : k <= 20000000 ? 900 : k <= 30000000 ? 1000 : 1019) + 5000) / 10000); // mirrors _withdrawal_fee_for() in the database
 const waUrl = () => { const st = settings(); return st.support_whatsapp_link || (st.support_whatsapp ? 'https://wa.me/' + st.support_whatsapp : ''); };
 const REASONS = [['HOST_NO_RESPONSE','Host is not responding'],['INVALID_CREDENTIALS','Login or credentials are invalid'],['ACCESS_NOT_WORKING','Access is not working'],
   ['WRONG_SUBSCRIPTION','Wrong subscription or plan'],['PAYMENT_ORDER','Payment or order problem'],['OTHER','Something else']];
@@ -840,13 +840,13 @@ function calcFees(){
   const pk = toKobo(b.value), wk = toKobo(w.value);
   $('#fc-buy-out').innerHTML = pk > 0 ? `<div><span>Seat price</span><b class="num">${naira(pk)}</b></div><div><span>Fee</span><b class="num">${naira(FEE())}</b></div><div class="total"><span>You pay</span><b class="num">${naira(pk + FEE())}</b></div>` : '';
   const min = settings().min_withdrawal_kobo;
-  $('#fc-wd-out').innerHTML = wk > 0 ? (wk < min ? `<div><span>Minimum withdrawal</span><b>${naira(min)}</b></div>` : `<div><span>Withdraw</span><b class="num">${naira(wk)}</b></div><div><span>Fee</span><b class="num">−${naira(WFEE())}</b></div><div class="total"><span>You receive</span><b class="num">${naira(wk - WFEE())}</b></div>`) : '';
+  $('#fc-wd-out').innerHTML = wk > 0 ? (wk < min ? `<div><span>Minimum withdrawal</span><b>${naira(min)}</b></div>` : `<div><span>Withdraw</span><b class="num">${naira(wk)}</b></div><div><span>Fee</span><b class="num">−${naira(WFEE(wk))}</b></div><div class="total"><span>You receive</span><b class="num">${naira(wk - WFEE(wk))}</b></div>`) : '';
 }
 function calcWithdraw(){
   const a = $('#w-amt'), out = $('#w-calc'); if (!a || !out) return;
   const k = toKobo(a.value), min = settings().min_withdrawal_kobo, av = bal().available_kobo;
   out.innerHTML = k <= 0 ? '' : k < min ? `<div><span>Minimum withdrawal</span><b>${naira(min)}</b></div>` : k > av ? `<div><span>You can withdraw up to</span><b>${naira(av)}</b></div>`
-    : `<div><span>Amount</span><b class="num">${naira(k)}</b></div><div><span>Withdrawal fee</span><b class="num">−${naira(WFEE())}</b></div><div class="total"><span>You receive</span><b class="num">${naira(k - WFEE())}</b></div>`;
+    : `<div><span>Amount</span><b class="num">${naira(k)}</b></div><div><span>Withdrawal fee</span><b class="num">−${naira(WFEE(k))}</b></div><div class="total"><span>You receive</span><b class="num">${naira(k - WFEE(k))}</b></div>`;
 }
 
 /* ---------- subscription requests ---------- */
