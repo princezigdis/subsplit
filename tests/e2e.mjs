@@ -389,6 +389,76 @@ await step('health', async () => {
   check('Customer app: no sideways scrolling at 390px', await buyer.evaluate(() => document.documentElement.scrollWidth <= 390));
 });
 
+// ---------- editable withdrawal fee list + admin delete account ----------
+await step('fee list', async () => {
+  await admin.click('.side [data-v=settings]'); await admin.waitForSelector('#f-fees');
+  check('Admin shows the fee list with 5 rows (last is "and above")', (await admin.$$('#fee-rows .feerow')).length === 5 && (await admin.inputValue('#fee-rows .feerow:last-child .fr-up')) === 'and above');
+  await admin.fill('#fee-try', '10000');
+  check('Admin "try an amount": ₦10,000 -> ₦800 fee, ₦9,200 received', (await admin.textContent('#fee-try-out')).includes('₦800') && (await admin.textContent('#fee-try-out')).includes('₦9,200'));
+  await admin.fill('#fee-rows .feerow:first-child .fr-val', '150');
+  await admin.click('[data-act=fee-add]');
+  check('Add a row works (6 rows)', (await admin.$$('#fee-rows .feerow')).length === 6);
+  await admin.click('#fee-rows .feerow:nth-child(5) [data-act=fee-del]');
+  check('Remove a row works (5 rows)', (await admin.$$('#fee-rows .feerow')).length === 5);
+  await admin.click('#f-fees [type=submit]'); check('Saving the fee list says so', /Fee list saved/.test(await toast(admin)));
+  check('Database now has ₦150 for the first row', sql(`select (withdrawal_fee_tiers -> 0 ->> 'flat_kobo') from platform_settings`) === '15000');
+  await admin.fill('#fee-rows .feerow:first-child .fr-val', '0'); await admin.fill('#fee-rows .feerow:nth-child(2) .fr-up', '1');
+  await admin.click('#f-fees [type=submit]'); check('A bad list is refused with a clear message', /higher than the row above|lower than/.test(await toast(admin)));
+  const cust = await newPage(); PAGES.cust = cust;
+  await cust.goto(B); await cust.waitForSelector('.hero'); await cust.evaluate(s => localStorage.setItem('subsplit-session', s), await buyer.evaluate(() => localStorage.getItem('subsplit-session')));
+  await cust.goto(B); await cust.waitForSelector('.hero'); await cust.click('.nav [data-v=wallet]');
+  await cust.click('[data-act=feecalc]'); await cust.waitForSelector('#fc-wd');
+  const txt = await cust.textContent('#sheet-box');
+  check('Wallet fee page lists the withdrawal fee rows (₦150 flat ... 10.19%)', txt.includes('₦150 flat') && txt.includes('10.19%') && txt.includes('8%') && !txt.includes('Fees are flat'), txt.slice(-400));
+  await cust.fill('#fc-wd', '2000');
+  check('Fee calculator uses the edited list: ₦2,000 -> fee ₦150, receive ₦1,850', (await cust.textContent('#fc-wd-out')).includes('₦150') && (await cust.textContent('#fc-wd-out')).includes('₦1,850'));
+  await cust.fill('#fc-wd', '10000');
+  check('Fee calculator: ₦10,000 -> 8% = ₦800, receive ₦9,200', (await cust.textContent('#fc-wd-out')).includes('₦800') && (await cust.textContent('#fc-wd-out')).includes('₦9,200'));
+  sql(`update platform_settings set withdrawal_fee_tiers = '[{"upto_kobo":299999,"flat_kobo":20000},{"upto_kobo":5000000,"bps":800},{"upto_kobo":20000000,"bps":900},{"upto_kobo":30000000,"bps":1000},{"upto_kobo":null,"bps":1019}]'::jsonb`);
+  await cust.close();
+});
+await step('admin delete account', async () => {
+  const c = await newPage(); PAGES.clean = c;
+  await signUp(c, 'Clean Slate', 'clean@subsplit.ng');
+  const cu = sql(`select username from profiles where email = 'clean@subsplit.ng'`), cid = sql(`select id from profiles where email = 'clean@subsplit.ng'`);
+  await admin.click('.side [data-v=users]'); await admin.fill('#u-q', 'clean@subsplit.ng'); await admin.press('#u-q', 'Enter');
+  await admin.waitForSelector('[data-act=user]'); await admin.click('[data-act=user]'); await admin.waitForSelector('#f-udel');
+  check('Delete form explains what is erased and kept', (await admin.textContent('#f-udel')).includes('history stays in the ledger'));
+  await admin.fill('#ud-name', 'wrong'); await admin.click('#f-udel [type=submit]'); await admin.click('#f-udel [type=submit]');
+  check('Wrong username is refused', /Type the username/.test(await toast(admin)));
+  await admin.fill('#ud-name', cu); await admin.fill('#ud-why', 'test cleanup'); await admin.click('#f-udel [type=submit]'); await admin.click('#f-udel [type=submit]');
+  check('Clean account is deleted completely', /Account removed/.test(await toast(admin)) && sql(`select count(*) from profiles where id = '${cid}'`) === '0' && sql(`select count(*) from auth.users where id = '${cid}'`) === '0');
+  check('Deletion is in the audit log', sql(`select count(*) from admin_audit_logs where action = 'CLOSE_ACCOUNT' and note = 'test cleanup'`) === '1');
+
+  const d = await newPage(); PAGES.hist = d;
+  await signUp(d, 'Close Me', 'closeme@subsplit.ng');
+  const du = sql(`select username from profiles where email = 'closeme@subsplit.ng'`), did = sql(`select id from profiles where email = 'closeme@subsplit.ng'`);
+  await admin.click('.side [data-v=users]'); await admin.fill('#u-q', 'closeme@subsplit.ng'); await admin.press('#u-q', 'Enter');
+  await admin.waitForSelector('[data-act=user]'); await admin.click('[data-act=user]'); await admin.waitForSelector('#f-adjust');
+  await admin.fill('#aj-amt', '500'); await admin.fill('#aj-note', 'test'); await admin.click('#f-adjust [type=submit]'); await admin.click('#f-adjust [type=submit]'); await toast(admin);
+  await admin.click('.side [data-v=users]'); await admin.fill('#u-q', 'closeme@subsplit.ng'); await admin.press('#u-q', 'Enter');
+  await admin.waitForSelector('[data-act=user]'); await admin.click('[data-act=user]'); await admin.waitForSelector('#f-udel');
+  await admin.fill('#ud-name', du); await admin.click('#f-udel [type=submit]'); await admin.click('#f-udel [type=submit]');
+  check('Account with money is blocked until the balance is ₦0', /Balance must be/.test(await toast(admin)) && sql(`select count(*) from profiles where id = '${did}'`) === '1');
+  await admin.click('#sheet-box [data-act=close]');
+  await admin.click('.side [data-v=users]'); await admin.fill('#u-q', 'closeme@subsplit.ng'); await admin.press('#u-q', 'Enter');
+  await admin.waitForSelector('[data-act=user]'); await admin.click('[data-act=user]'); await admin.waitForSelector('#f-adjust');
+  await admin.fill('#aj-amt', '-500'); await admin.fill('#aj-note', 'clear'); await admin.click('#f-adjust [type=submit]'); await admin.click('#f-adjust [type=submit]'); await toast(admin);
+  await admin.click('.side [data-v=users]'); await admin.fill('#u-q', 'closeme@subsplit.ng'); await admin.press('#u-q', 'Enter');
+  await admin.waitForSelector('[data-act=user]'); await admin.click('[data-act=user]'); await admin.waitForSelector('#f-udel');
+  await admin.fill('#ud-name', du); await admin.click('#f-udel [type=submit]'); await admin.click('#f-udel [type=submit]');
+  check('Account with history is closed: ' + 'details erased', /Account removed/.test(await toast(admin)) && sql(`select username like 'removed-%' and full_name = 'Removed user' and phone = '' and email like 'removed-%' and closed_at is not null from profiles where id = '${did}'`) === 't');
+  check('Closed account keeps its ledger rows and ledger still balances', +sql(`select count(*) from wallet_transactions where user_id = '${did}'`) >= 2 && sql(`set "request.jwt.claim.sub" = '${sql("select id from profiles where email = 'owner@subsplit.ng'")}'; set role authenticated; select jsonb_array_length(admin_ledger_check())`) === '0');
+  check('Closed account login is blocked and email freed', sql(`select banned from auth.users where id = '${did}'`) === 't' && sql(`select email like 'removed-%' from auth.users where id = '${did}'`) === 't');
+  const e2 = await newPage(); PAGES.again = e2;
+  await e2.goto(B); await e2.waitForSelector('.hero'); await e2.click('.top [data-act=auth]');
+  await e2.fill('#a-email', 'closeme@subsplit.ng'); await e2.fill('#a-pass', 'password123'); await e2.click('#f-signin [type=submit]');
+  check('Closed account cannot sign in', /Invalid|incorrect|wrong/i.test(await toast(e2)));
+  const own = sql(`select id from profiles where email = 'owner@subsplit.ng'`);
+  const r = await admin.evaluate(async (id) => { try { await API.fn('admin-delete-user', {user_id:id, confirm:'x'}); return 'ok'; } catch (e) { return e.message; } }, own);
+  check('Admin cannot delete their own account', /own account|Type the username|admin/i.test(r), r);
+});
+
 check('No JavaScript errors in either app', errors.length === 0, errors.slice(0, 5).join(' | '));
 await browser.close();
 for (const r of results) console.log(`${r.ok ? 'PASS' : 'FAIL'}  ${r.name}${r.ok ? '' : '  -> ' + r.detail}`);

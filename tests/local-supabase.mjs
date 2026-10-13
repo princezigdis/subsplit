@@ -58,7 +58,7 @@ const ENV = { SUPABASE_URL: BASE, SUPABASE_SERVICE_ROLE_KEY: SERVICE_KEY, PAYSTA
               PAYSTACK_API_BASE: BASE + '/paystack', SITE_URL: BASE + '/' };
 const FUNCS = {};
 globalThis.Deno = { env: { get: k => ENV[k] }, serve: h => { FUNCS.__last = h; } };
-for (const name of ['payments-init', 'payments-verify', 'paystack-webhook']) {
+for (const name of ['payments-init', 'payments-verify', 'paystack-webhook', 'admin-delete-user']) {
   await import(pathToFileURL(path.join(ROOT, 'backend/functions', name, 'index.ts')).href);
   FUNCS[name] = FUNCS.__last;
 }
@@ -121,7 +121,7 @@ http.createServer(async (req, res) => {
         return r.out ? send(res, 200, makeSession({ id, email: r.out })) : send(res, 400, { error_description: 'Invalid Refresh Token' });
       }
       if (UNCONFIRMED.has(String(b.email || '').toLowerCase())) return send(res, 400, { error_code: 'email_not_confirmed', msg: 'Email not confirmed' });
-      const r = await psql(`select id from auth.users where email = ${q(String(b.email || '').toLowerCase())} and test_password = ${q(b.password)}`);
+      const r = await psql(`select id from auth.users where email = ${q(String(b.email || '').toLowerCase())} and test_password = ${q(b.password)} and not coalesce(banned, false)`);
       return r.out ? send(res, 200, makeSession({ id: r.out, email: b.email.toLowerCase() })) : send(res, 400, { error: 'invalid_grant', error_description: 'Invalid login credentials' });
     }
     if (p === '/auth/v1/user') {
@@ -132,6 +132,17 @@ http.createServer(async (req, res) => {
     }
     if (p === '/auth/v1/logout') return send(res, 204, '');
     if (p === '/auth/v1/recover') return send(res, 200, {});
+
+    // ----- Auth admin + table access used by the admin-delete-user function (service role only) -----
+    {
+      const w = whoFromAuth(req), um = p.match(/^\/auth\/v1\/admin\/users\/([0-9a-f-]{36})$/), wm = p.match(/^\/rest\/v1\/wallet_accounts$/);
+      if (um || wm) {
+        if (w.role !== 'service_role') return send(res, 401, { message: 'service role only' });
+        if (um && req.method === 'DELETE') { const r = await psql(`delete from auth.users where id = ${q(um[1])}`); return r.ok ? send(res, 200, {}) : send(res, 500, { message: r.err }); }
+        if (um && req.method === 'PUT') { const bj = json(); const r = await psql(`update auth.users set email = ${q(bj.email)}, banned = true where id = ${q(um[1])}`); return r.ok ? send(res, 200, {}) : send(res, 500, { message: r.err }); }
+        if (wm && req.method === 'DELETE') { const id = (url.searchParams.get('owner_id') || '').replace(/^eq\./, ''); const r = await psql(`delete from public.wallet_accounts where owner_id = ${q(id)}`); return r.ok ? send(res, 204, '') : send(res, 409, { message: r.err }); }
+      }
+    }
 
     // ----- Database functions (PostgREST /rpc) -----
     if (p.startsWith('/rest/v1/rpc/')) {

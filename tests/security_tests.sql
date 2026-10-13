@@ -452,6 +452,88 @@ select t.ok('W9 N300,000.01 -> 10.19%', _withdrawal_fee_for(30000001) = 3057000)
 select t.ok('W10 N500,000.00 -> 10.19% = N50,950', _withdrawal_fee_for(50000000) = 5095000);
 select t.ok('W11 Fee function is not callable by users', not has_function_privilege('authenticated', '_withdrawal_fee_for(bigint)', 'execute'));
 
+-- ---------- Editable withdrawal fee list (010) ----------
+reset role;
+\set N3 '00000000-0000-0000-0000-0000000000a4'
+\set N4 '00000000-0000-0000-0000-0000000000a5'
+\set N5 '00000000-0000-0000-0000-0000000000a6'
+insert into auth.users (id, email, raw_user_meta_data) values (:'N3', 'clean@subsplit.test', '{"full_name":"Clean Slate"}'), (:'N4', 'closeme@subsplit.test', '{"full_name":"Close Me"}'), (:'N5', 'wd@subsplit.test', '{"full_name":"With Draw"}');
+set role service_role;
+select payment_create(:'N5', 'REF-N5', 'TOPUP', 2000000);
+select payment_complete('REF-N5', 2000000, 'NGN', 'ps_n5', 'card');
+reset role;
+-- accuracy: 6,000 random amounts + every boundary against an independent reference
+select setseed(0.42);
+select t.ok('FZ1 Fee function matches the reference on 6,000 random amounts and all boundaries',
+  (select count(*) = 0 from (select a from (select (1 + floor(random() * 60000000))::bigint a from generate_series(1, 6000)
+        union all select unnest(array[1,99999,100000,299999,300000,300001,4999999,5000000,5000001,19999999,20000000,20000001,29999999,30000000,30000001,50000000,50000001,99999999999]::bigint[])) x
+      where _withdrawal_fee_for(a) is distinct from (case when a < 300000 then 20000::bigint else (a * (case when a <= 5000000 then 800 when a <= 20000000 then 900 when a <= 30000000 then 1000 else 1019 end) + 5000) / 10000 end)) bad));
+select t.ok('FZ2 Fee is always smaller than the amount (every amount from the minimum up)', (select count(*) = 0 from generate_series(100000, 3000000, 997) a where _withdrawal_fee_for(a) >= a));
+select t.ok('FZ3 Fee never goes down as the amount goes up beyond N3,000', (select bool_and(f2 >= f1) from (select _withdrawal_fee_for(a) f1, _withdrawal_fee_for(a + 1) f2 from generate_series(300000, 60000000, 7919) a) q));
+select t.ok('FL1 Default list is in the public catalog', jsonb_array_length(public_catalog() -> 'settings' -> 'withdrawal_fee_tiers') = 5);
+set role authenticated; set "request.jwt.claim.sub" = :'E';
+select t.err('FL2 Non-admin cannot change fees', 'select admin_save_fee_tiers(''[{"upto_kobo":null,"bps":100}]''::jsonb)', '%Access denied%');
+set "request.jwt.claim.sub" = :'A';
+select t.err('FL3 Last row must be "and above"', 'select admin_save_fee_tiers(''[{"upto_kobo":500000,"bps":100}]''::jsonb)', '%last row must be%');
+select t.err('FL4 Rows must go up', 'select admin_save_fee_tiers(''[{"upto_kobo":500000,"bps":100},{"upto_kobo":400000,"bps":100},{"upto_kobo":null,"bps":100}]''::jsonb)', '%higher than the row above%');
+select t.err('FL5 Cannot set both flat and percent', 'select admin_save_fee_tiers(''[{"upto_kobo":null,"bps":100,"flat_kobo":100}]''::jsonb)', '%not both%');
+select t.err('FL6 Percent above 50 refused', 'select admin_save_fee_tiers(''[{"upto_kobo":null,"bps":5001}]''::jsonb)', '%between 0 and 50%');
+select t.err('FL7 Flat fee must stay below the smallest withdrawal', 'select admin_save_fee_tiers(''[{"upto_kobo":null,"flat_kobo":100000}]''::jsonb)', '%not lower than%');
+select t.err('FL8 Negative fee refused', 'select admin_save_fee_tiers(''[{"upto_kobo":null,"flat_kobo":-5}]''::jsonb)', '%cannot be negative%');
+select t.err('FL9 More than 12 rows refused', 'select admin_save_fee_tiers((select jsonb_agg(jsonb_build_object(''upto_kobo'', n * 100000, ''bps'', 100)) from generate_series(1, 13) n))', '%between 1 and 12%');
+select t.err('FL10 Percent with 3 decimals refused', 'select admin_save_fee_tiers(''[{"upto_kobo":null,"bps":10.5}]''::jsonb)', '%2 decimals%');
+select t.ok('FL11 Bad saves changed nothing', jsonb_array_length((select withdrawal_fee_tiers from platform_settings where id = 1)) = 5);
+select admin_save_fee_tiers('[{"upto_kobo":500000,"flat_kobo":5000},{"upto_kobo":null,"bps":250}]'::jsonb);
+reset role;
+select t.ok('FL12 New list is used: N5,000 -> N50 flat', _withdrawal_fee_for(500000) = 5000);
+select t.ok('FL13 New list is used: N5,000.01 -> 2.5%', _withdrawal_fee_for(500001) = 12500);
+select t.ok('FL14 New list shows in the public catalog', jsonb_array_length(public_catalog() -> 'settings' -> 'withdrawal_fee_tiers') = 2);
+select t.ok('FL15 Saving is written to the audit log', exists (select 1 from admin_audit_logs where action = 'UPDATE_WITHDRAWAL_FEES'));
+set role authenticated; set "request.jwt.claim.sub" = :'N5';
+select request_withdrawal(500000, 'GTBank', '0123456789', 'With Draw');
+reset role;
+select t.ok('FL16 A withdrawal uses the edited list (fee N50, payout N4,950)', (select fee_kobo || '/' || payout_kobo from withdrawals where user_id = :'N5') = '5000/495000');
+set role authenticated; set "request.jwt.claim.sub" = :'A';
+select admin_save_fee_tiers('[{"upto_kobo":299999,"flat_kobo":20000},{"upto_kobo":5000000,"bps":800},{"upto_kobo":20000000,"bps":900},{"upto_kobo":30000000,"bps":1000},{"upto_kobo":null,"bps":1019}]'::jsonb);
+reset role;
+select t.ok('FL17 Original list restored', _withdrawal_fee_for(300000) = 24000 and _withdrawal_fee_for(299999) = 20000);
+select t.ok('FL18 Old withdrawal keeps the fee it was charged', (select fee_kobo from withdrawals where user_id = :'N5') = 5000);
+select t.ok('FL19 Ledger still balanced', jsonb_array_length(admin_ledger_check()) = 0, admin_ledger_check()::text);
+
+-- ---------- Admin removes accounts (010) ----------
+set role authenticated; set "request.jwt.claim.sub" = :'E';
+select t.err('AC1 Non-admin cannot start a removal', format('select admin_close_account_plan(%L, ''x'')', :'N3'), '%Access denied%');
+select t.err('AC1b Non-admin cannot call the eraser', format('select account_anonymize(%L)', :'N3'), '%permission denied%');
+set "request.jwt.claim.sub" = :'A';
+select t.err('AC2 Cannot remove yourself', format('select admin_close_account_plan(%L, %L)', :'A', (select username from profiles where id = :'A')), '%your own account%');
+select t.err('AC3 Wrong username refused', format('select admin_close_account_plan(%L, ''nope'')', :'N3'), '%Type the username%');
+select t.ok('AC4 Clean account is marked for full removal', (admin_close_account_plan(:'N3', (select username from profiles where id = :'N3')) ->> 'mode') = 'REMOVE');
+select t.err('AC5 Account with money and a waiting withdrawal is blocked', format('select admin_close_account_plan(%L, %L)', :'N5', (select username from profiles where id = :'N5')), '%Balance must be%');
+select admin_credit_user(:'N4', 50000, 'test credit');
+select t.err('AC6 Account with a balance is blocked', format('select admin_close_account_plan(%L, %L)', :'N4', (select username from profiles where id = :'N4')), '%Balance must be%');
+select admin_adjust_wallet(:'N4', 'WALLET', -50000, 'clear for removal');
+select t.ok('AC7 Account with history but no balance is marked CLOSE', (admin_close_account_plan(:'N4', (select username from profiles where id = :'N4')) ->> 'mode') = 'CLOSE');
+select admin_close_account_log(:'N4', 'CLOSE', 'x', 'test');
+select t.ok('AC8 Removal is written to the audit log', exists (select 1 from admin_audit_logs where action = 'CLOSE_ACCOUNT'));
+reset role;
+insert into admin_users (user_id) values (:'N3');
+set role authenticated; set "request.jwt.claim.sub" = :'A';
+select t.err('AC9b Another admin cannot be removed', format('select admin_close_account_plan(%L, %L)', :'N3', (select username from profiles where id = :'N3')), '%admin access first%');
+reset role;
+set role service_role;
+select account_anonymize(:'N4');
+reset role;
+select t.ok('AC10 Personal details are erased', (select full_name = 'Removed user' and phone = '' and email = '' and username like 'removed-%' and closed_at is not null and status = 'SUSPENDED' from profiles where id = :'N4'));
+select t.ok('AC11 Ledger rows of the removed account are kept', (select count(*) >= 2 from wallet_transactions where user_id = :'N4'));
+select t.ok('AC12 Ledger still balanced after the removal', jsonb_array_length(admin_ledger_check()) = 0, admin_ledger_check()::text);
+select account_anonymize(:'N4');
+select t.ok('AC13 Removing twice does no harm', (select username from profiles where id = :'N4') like 'removed-%' and (select count(*) from profiles where username like 'removed-%') = 1);
+
+-- ---------- _balance() speed rewrite keeps the same answers (012) ----------
+select t.ok('BL1 Balance lookup matches the table for every account (users and platform)',
+  (select count(*) = 0 from wallet_accounts a where _balance(a.owner_id, a.kind) is distinct from a.balance_kobo));
+select t.ok('BL2 Unknown account gives 0', _balance('00000000-0000-0000-0000-00000000dead', 'WALLET') = 0 and _balance(null, 'NOPE') = 0);
+
 \echo
 select case when ok then 'PASS' else 'FAIL' end as result, name, case when ok then '' else detail end as detail from t.results order by n;
 select count(*) filter (where ok) as passed, count(*) filter (where not ok) as failed from t.results;

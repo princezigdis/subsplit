@@ -1,0 +1,32 @@
+-- 011: speed. Covering indexes for every foreign key, and row-security rules that evaluate the signed-in user once per query instead of once per row.
+create index if not exists idx_disputes_buyer_id on public.disputes (buyer_id);
+create index if not exists idx_disputes_host_id on public.disputes (host_id);
+create index if not exists idx_disputes_listing_id on public.disputes (listing_id);
+create index if not exists idx_disputes_raised_by on public.disputes (raised_by);
+create index if not exists idx_email_outbox_to_user on public.email_outbox (to_user);
+create index if not exists idx_host_proofs_host_id on public.host_proofs (host_id);
+create index if not exists idx_listings_plan_id on public.listings (plan_id);
+create index if not exists idx_memberships_plan_id on public.memberships (plan_id);
+create index if not exists idx_order_messages_sender_id on public.order_messages (sender_id);
+create index if not exists idx_order_reads_user_id on public.order_reads (user_id);
+create index if not exists idx_payments_listing_id on public.payments (listing_id);
+create index if not exists idx_profiles_referred_by on public.profiles (referred_by);
+create index if not exists idx_promo_claims_user_id on public.promo_claims (user_id);
+create index if not exists idx_referrals_promo_id on public.referrals (promo_id);
+create index if not exists idx_support_messages_author_id on public.support_messages (author_id);
+create index if not exists idx_support_messages_ticket_id on public.support_messages (ticket_id);
+create index if not exists idx_support_tickets_user_id on public.support_tickets (user_id);
+create index if not exists idx_withdrawals_user_id on public.withdrawals (user_id);
+
+alter policy "own disputes" on public.disputes using ((buyer_id = (select auth.uid())) OR (host_id = (select auth.uid())) OR (select is_admin()));
+alter policy "own listings" on public.listings using ((host_id = (select auth.uid())) OR (select is_admin()));
+alter policy "own memberships" on public.memberships using ((buyer_id = (select auth.uid())) OR (host_id = (select auth.uid())) OR (select is_admin()));
+alter policy "own notifications" on public.notifications using (user_id = (select auth.uid()));
+alter policy "own payments" on public.payments using ((user_id = (select auth.uid())) OR (select is_admin()));
+alter policy "own profile" on public.profiles using ((id = (select auth.uid())) OR (select is_admin()));
+alter policy "own tickets" on public.support_tickets using ((user_id = (select auth.uid())) OR (select is_admin()));
+alter policy "own accounts" on public.wallet_accounts using ((owner_id = (select auth.uid())) OR (select is_admin()));
+alter policy "own ledger" on public.wallet_transactions using ((user_id = (select auth.uid())) OR (select is_admin()));
+alter policy "own withdrawals" on public.withdrawals using ((user_id = (select auth.uid())) OR (select is_admin()));
+alter policy "own ticket messages" on public.support_messages using ((select is_admin()) OR (EXISTS (SELECT 1 FROM support_tickets t WHERE ((t.id = support_messages.ticket_id) AND (t.user_id = (select auth.uid()))))));
+alter policy "entitled access" on public.listing_access using ((select is_admin()) OR (EXISTS (SELECT 1 FROM listings l WHERE ((l.id = listing_access.listing_id) AND (l.host_id = (select auth.uid()))))) OR (EXISTS (SELECT 1 FROM memberships m WHERE ((m.listing_id = listing_access.listing_id) AND (m.buyer_id = (select auth.uid())) AND ((m.status = 'DISPUTED'::text) OR ((m.status = 'ACTIVE'::text) AND (m.ends_at > now())))))));

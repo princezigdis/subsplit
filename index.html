@@ -307,7 +307,14 @@ const ACCESS = {
 };
 const needsContact = t => t !== 'LOGIN';
 const FEE = () => settings().buyer_fee_kobo || 20000;
-const WFEE = (k) => !(k > 0) ? (settings().withdrawal_fee_kobo || 20000) : k < 300000 ? 20000 : Math.floor((k * (k <= 5000000 ? 800 : k <= 20000000 ? 900 : k <= 30000000 ? 1000 : 1019) + 5000) / 10000); // mirrors _withdrawal_fee_for() in the database
+const FEE_TIERS_DEFAULT = [{upto_kobo:299999, flat_kobo:20000}, {upto_kobo:5000000, bps:800}, {upto_kobo:20000000, bps:900}, {upto_kobo:30000000, bps:1000}, {upto_kobo:null, bps:1019}];
+const feeTiers = () => { const t = settings().withdrawal_fee_tiers; return Array.isArray(t) && t.length ? t : FEE_TIERS_DEFAULT; };
+const pctTxt = bps => (bps / 100).toFixed(2).replace(/\.?0+$/, '') + '%';
+// Same rule as _withdrawal_fee_for() in the database (the database is what really charges the fee).
+const WFEE = k => { const ts = feeTiers(); if (!(k > 0)) k = 1; for (const t of ts){ if (t.upto_kobo == null || k <= t.upto_kobo) return t.flat_kobo != null ? t.flat_kobo : Math.floor((k * t.bps + 5000) / 10000); } const l = ts[ts.length - 1]; return l.flat_kobo != null ? l.flat_kobo : Math.floor((k * l.bps + 5000) / 10000); };
+function feeLines(){ let prev = 0; return feeTiers().map(t => { const lab = t.upto_kobo == null ? `Above ${naira(prev)}` : prev === 0 ? `Up to ${naira(t.upto_kobo)}` : `${naira(prev + 1)} to ${naira(t.upto_kobo)}`; if (t.upto_kobo != null) prev = t.upto_kobo; return [lab, t.flat_kobo != null ? `${naira(t.flat_kobo)} flat` : pctTxt(t.bps)]; }); }
+const feeText = () => feeLines().map(([a, b]) => `${a}: ${b}`).join('; ');
+const feeShort = () => [...new Set(feeLines().map(x => x[1]))].join(', ');
 const waUrl = () => { const st = settings(); return st.support_whatsapp_link || (st.support_whatsapp ? 'https://wa.me/' + st.support_whatsapp : ''); };
 const REASONS = [['HOST_NO_RESPONSE','Host is not responding'],['INVALID_CREDENTIALS','Login or credentials are invalid'],['ACCESS_NOT_WORKING','Access is not working'],
   ['WRONG_SUBSCRIPTION','Wrong subscription or plan'],['PAYMENT_ORDER','Payment or order problem'],['OTHER','Something else']];
@@ -361,12 +368,14 @@ const bal = () => (S.me && S.me.balances) || {};
 
 /* ---------- loading ---------- */
 async function loadAll(){
-  API.rpc('release_due_escrow').catch(() => {});
+  // Signed-in people: release any escrow that is due FIRST so their balances are right on the very first screen.
+  // (Public visitors don't need it; the scheduled job covers everyone else.) Public data loads at the same time.
+  const rel = API.user ? API.rpc('release_due_escrow').catch(() => {}) : null;
   const pub = Promise.all([API.rpc('public_catalog'), API.rpc('explore_listings')]);
   let mine = null;
   if (API.user){
-    mine = Promise.all([API.rpc('my_overview'), API.rpc('my_subscriptions'), API.rpc('my_listings'), API.rpc('my_wallet'), API.rpc('my_notifications'),
-                        API.rpc('my_orders'), API.rpc('my_requests'), API.rpc('my_referrals')])
+    mine = rel.then(() => Promise.all([API.rpc('my_overview'), API.rpc('my_subscriptions'), API.rpc('my_listings'), API.rpc('my_wallet'), API.rpc('my_notifications'),
+                        API.rpc('my_orders'), API.rpc('my_requests'), API.rpc('my_referrals')]))
       .catch(async e => { if (e.status === 401 || e.status === 403) { API.forgetSession(); return null; } throw e; });
   }
   const [cat, list] = await pub;
@@ -832,7 +841,7 @@ function feeCalcSheet(){
     <div class="kv" id="fc-buy-out"></div>
     <div class="field"><label for="fc-wd">Amount you want to withdraw (₦)</label><input id="fc-wd" inputmode="decimal" placeholder="e.g. 5000"></div>
     <div class="kv" id="fc-wd-out"></div>
-    <p class="muted xs">Fees are flat: ${naira(FEE())} on every purchase and ${naira(WFEE())} on every withdrawal. Deposits are free. Minimum deposit ${naira(settings().min_topup_kobo)}, minimum withdrawal ${naira(settings().min_withdrawal_kobo)}.</p></div>`);
+    <p class="muted xs">Paying for a seat costs a flat ${naira(FEE())} fee. A withdrawal fee comes off each withdrawal and depends on the amount: ${esc(feeText())}. Deposits are free. Minimum deposit ${naira(settings().min_topup_kobo)}, minimum withdrawal ${naira(settings().min_withdrawal_kobo)}.</p></div>`);
   calcFees();
 }
 function calcFees(){
@@ -1027,7 +1036,7 @@ function withdrawSheet(){
   }
   const banks = ['Access Bank','Ecobank','FCMB','Fidelity Bank','First Bank','GTBank','Kuda','Moniepoint','Opay','Palmpay','Polaris Bank','Stanbic IBTC','Sterling Bank','UBA','Union Bank','Wema Bank','Zenith Bank'];
   openSheet('Withdraw to bank', `<form class="form" id="f-withdraw" novalidate>
-    <div class="kv"><div><span>Available to withdraw</span><b class="num">${naira(b.available_kobo)}</b></div><div><span>Minimum withdrawal</span><b class="num">${naira(s.min_withdrawal_kobo)}</b></div><div><span>Withdrawal fee</span><b class="num">${naira(WFEE())}</b></div></div>
+    <div class="kv"><div><span>Available to withdraw</span><b class="num">${naira(b.available_kobo)}</b></div><div><span>Minimum withdrawal</span><b class="num">${naira(s.min_withdrawal_kobo)}</b></div><div><span>Withdrawal fee</span><b>${esc(feeShort())}</b></div></div>
     <div class="field"><label for="w-amt">Amount to withdraw (₦)</label><input id="w-amt" inputmode="decimal" value="${(b.available_kobo / 100).toFixed(b.available_kobo % 100 ? 2 : 0)}"></div>
     <div class="kv" id="w-calc"></div>
     <div class="field"><label for="w-bank">Bank</label><select id="w-bank">${banks.map(x => `<option>${x}</option>`).join('')}</select></div>
@@ -1070,7 +1079,7 @@ function helpSheet(){
 function earnInfoSheet(){
   openSheet('How host earnings work', `<div class="info">
     <div>${ic('clock')}<span class="grow"><b>Pending</b><span>When a member pays, your share (seat price minus the ${(S.catalog.fee_bps || 1000) / 100}% fee) is held in escrow for ${settings().escrow_days || 30} days and shows as pending.</span></span></div>
-    <div>${ic('check')}<span class="grow"><b>Available</b><span>After ${settings().escrow_days || 30} days it moves to Available automatically (once). You can then withdraw it. Withdrawals cost ${naira(WFEE())}.</span></span></div>
+    <div>${ic('check')}<span class="grow"><b>Available</b><span>After ${settings().escrow_days || 30} days it moves to Available automatically (once). You can then withdraw it. A withdrawal fee applies (${esc(feeText())}).</span></span></div>
     <div>${ic('shield')}<span class="grow"><b>If a member reports a problem</b><span>That seat's money waits until support sorts it out with you.</span></span></div></div>`);
 }
 function filtersSheet(){

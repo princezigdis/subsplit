@@ -23,7 +23,7 @@
 <tr><td>Minimum withdrawal</td><td>₦1,000</td></tr>
 <tr><td>Cancellation fee (see Refund Policy)</td><td>30% of the seat price</td></tr></table></div>
 <p><b>Withdrawal fee</b> depends on the amount you withdraw:</p>
-<div class="card"><table><tr><th>Withdrawal amount</th><th>Fee</th></tr>
+<div class="card"><table id="fee-table"><tr><th>Withdrawal amount</th><th>Fee</th></tr>
 <tr><td>Under ₦3,000</td><td>₦200 flat</td></tr>
 <tr><td>₦3,000 to ₦50,000</td><td>8%</td></tr>
 <tr><td>₦50,000.01 to ₦200,000</td><td>9%</td></tr>
@@ -48,4 +48,24 @@
 <div class="btns"><a class="btn" href="https://wa.me/2347085002123" target="_blank" rel="noopener">WhatsApp support: +234 708 500 2123</a><a class="btn alt" href="https://whatsapp.com/channel/0029Vb93ZqsInlqXiLFPBM1U" target="_blank" rel="noopener">Join our WhatsApp channel</a></div>
 <p class="meta">You can also open SplitSub, tap <b>Help</b> and choose <b>Message support</b>.</p></div>
 <nav class="legal" aria-label="Policies"><a href="/terms.html">Terms of Service</a> · <a href="/privacy.html">Privacy Policy</a> · <a href="/user-policy.html">User Policy</a> · <a href="/refund-policy.html">Refund & Cancellation Policy</a> · <a href="/">Back to SplitSub</a></nav>
-<footer>© 2026 SplitSub · splitsub.app</footer></div></body></html>
+<footer>© 2026 SplitSub · splitsub.app</footer><script src="/config.js"></script>
+<script>
+/* Keeps the withdrawal fee table in sync with the fee list set in Admin. The table above is the fallback. */
+(function(){try{
+  var c=window.SUBSPLIT_CONFIG; if(!c||!c.SUPABASE_URL||!c.SUPABASE_PUBLISHABLE_KEY) return;
+  var n=function(k){k=Number(k)||0;var f=k%100!==0;return '\u20A6'+(k/100).toLocaleString('en-NG',{minimumFractionDigits:f?2:0,maximumFractionDigits:2});};
+  var pct=function(b){return (b/100).toFixed(2).replace(/\.?0+$/,'')+'%';};
+  fetch(c.SUPABASE_URL+'/rest/v1/rpc/public_catalog',{method:'POST',headers:{apikey:c.SUPABASE_PUBLISHABLE_KEY,Authorization:'Bearer '+c.SUPABASE_PUBLISHABLE_KEY,'Content-Type':'application/json'},body:'{}'})
+   .then(function(r){return r.json();}).then(function(d){
+     var t=d&&d.settings&&d.settings.withdrawal_fee_tiers; if(!t||!t.length) return;
+     var prev=0,h='<tr><th>Withdrawal amount</th><th>Fee</th></tr>';
+     t.forEach(function(x){
+       var lab=x.upto_kobo==null?'Above '+n(prev):prev===0?'Up to '+n(x.upto_kobo):n(prev+1)+' to '+n(x.upto_kobo);
+       if(x.upto_kobo!=null) prev=x.upto_kobo;
+       h+='<tr><td>'+lab+'</td><td>'+(x.flat_kobo!=null?n(x.flat_kobo)+' flat':pct(x.bps))+'</td></tr>';
+     });
+     document.getElementById('fee-table').innerHTML=h;
+   }).catch(function(){});
+}catch(e){}})();
+</script>
+</div></body></html>

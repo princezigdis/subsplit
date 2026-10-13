@@ -153,6 +153,33 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt
 const naira = k => { k = Number(k) || 0; const f = k % 100 !== 0; return '₦' + (k / 100).toLocaleString('en-NG', {minimumFractionDigits: f ? 2 : 0, maximumFractionDigits: 2}); };
 const toKobo = v => Math.round((parseFloat(String(v).replace(/[,₦\s]/g, '')) || 0) * 100);
 const nairaInput = k => k == null ? '' : (k / 100).toFixed(k % 100 ? 2 : 0);
+/* ---- withdrawal fee list editor ---- */
+const FEE_DEFAULT = [{upto_kobo:299999, flat_kobo:20000}, {upto_kobo:5000000, bps:800}, {upto_kobo:20000000, bps:900}, {upto_kobo:30000000, bps:1000}, {upto_kobo:null, bps:1019}];
+function feeRowHtml(t, last){
+  const flat = t.flat_kobo != null;
+  return `<div class="feerow" style="display:grid;grid-template-columns:1.3fr 1fr 1fr auto;gap:8px;align-items:end;margin-bottom:8px">
+    <div class="field" style="margin:0"><label>${last ? 'Everything above' : 'Up to (₦)'}</label>${last ? '<input class="fr-up" value="and above" disabled>' : `<input class="fr-up" inputmode="decimal" value="${nairaInput(t.upto_kobo)}">`}</div>
+    <div class="field" style="margin:0"><label>Fee type</label><select class="fr-type"><option value="flat" ${flat ? 'selected' : ''}>Flat ₦</option><option value="pct" ${flat ? '' : 'selected'}>Percent %</option></select></div>
+    <div class="field" style="margin:0"><label>Fee</label><input class="fr-val" inputmode="decimal" value="${flat ? nairaInput(t.flat_kobo) : (t.bps / 100)}"></div>
+    ${last ? '<span></span>' : '<button class="btn soft sm" type="button" data-act="fee-del" aria-label="Remove this row">×</button>'}</div>`;
+}
+function feeRowsHtml(tiers){ const ts = Array.isArray(tiers) && tiers.length ? tiers : FEE_DEFAULT; return ts.map((t, i) => feeRowHtml(t, i === ts.length - 1)).join(''); }
+function readFeeRows(){
+  const rows = [...document.querySelectorAll('#fee-rows .feerow')];
+  return rows.map((r, i) => {
+    const last = i === rows.length - 1, type = r.querySelector('.fr-type').value, v = parseFloat(String(r.querySelector('.fr-val').value).replace(/[,₦%\s]/g, ''));
+    const o = {upto_kobo: last ? null : toKobo(r.querySelector('.fr-up').value)};
+    if (type === 'flat') o.flat_kobo = toKobo(r.querySelector('.fr-val').value); else o.bps = Math.round((isNaN(v) ? 0 : v) * 100);
+    return o;
+  });
+}
+function feeFor(tiers, k){ for (const t of tiers){ if (t.upto_kobo == null || k <= t.upto_kobo) return t.flat_kobo != null ? t.flat_kobo : Math.floor((k * t.bps + 5000) / 10000); } return 0; }
+function feeTry(){
+  const o = document.getElementById('fee-try-out'); if (!o) return;
+  const k = toKobo(document.getElementById('fee-try').value);
+  if (k <= 0){ o.textContent = '—'; return; }
+  const f = feeFor(readFeeRows(), k); o.textContent = `${naira(f)} / ${naira(k - f)}`;
+}
 const fmtDT = t => t ? new Date(t).toLocaleString('en-GB', {day:'numeric', month:'short', year:'numeric', hour:'numeric', minute:'2-digit'}) : '—';
 const fmtD = t => t ? new Date(t).toLocaleDateString('en-GB', {day:'numeric', month:'short', year:'numeric'}) : '—';
 function textOn(hex){ const h = (hex || '#5B5BD6').replace('#', ''); const [r, g, b] = [0, 2, 4].map(i => parseInt(h.substr(i, 2), 16) / 255); return (0.2126*r + 0.7152*g + 0.0722*b) > 0.62 ? '#1A1A1A' : '#FFFFFF'; }
@@ -402,7 +429,7 @@ const PAGE = {
         <div class="two"><div class="field"><label for="st-wa">Old WhatsApp number (digits, optional)</label><input id="st-wa" inputmode="tel" value="${esc(s.support_whatsapp)}" placeholder="2348012345678"></div>
         <div class="field"><label for="st-email">Support email</label><input id="st-email" type="email" value="${esc(s.support_email)}"></div></div></div>
       <div class="card form"><h3>Money rules</h3>
-        <div class="kv"><div><span>Platform commission</span><b>${s.fee_bps / 100}% (fixed in the database)</b></div><div><span>Host markup limit</span><b>10% to 30% (fixed)</b></div><div><span>Purchase fee</span><b>₦200 flat (fixed)</b></div><div><span>Withdrawal fee</span><b>₦200 flat (fixed)</b></div><div><span>Escrow for host earnings</span><b>30 days (fixed)</b></div><div><span>Minimums</span><b>Deposit ₦100 · Withdrawal ₦1,000 or more</b></div></div>
+        <div class="kv"><div><span>Platform commission</span><b>${s.fee_bps / 100}% (fixed in the database)</b></div><div><span>Host markup limit</span><b>10% to 30% (fixed)</b></div><div><span>Purchase fee</span><b>₦200 flat (fixed)</b></div><div><span>Withdrawal fee</span><b>Set in the list below</b></div><div><span>Escrow for host earnings</span><b>30 days (fixed)</b></div><div><span>Minimums</span><b>Deposit ₦100 · Withdrawal ₦1,000 or more</b></div></div>
         <div class="two"><div class="field"><label for="st-minw">Smallest withdrawal (₦)</label><input id="st-minw" inputmode="decimal" value="${nairaInput(s.min_withdrawal_kobo)}"></div>
         <div class="field"><label for="st-mint">Smallest top-up (₦)</label><input id="st-mint" inputmode="decimal" value="${nairaInput(s.min_topup_kobo)}"></div>
         <div class="field"><label for="st-maxt">Largest top-up (₦)</label><input id="st-maxt" inputmode="decimal" value="${nairaInput(s.max_topup_kobo)}"></div>
@@ -411,6 +438,12 @@ const PAGE = {
         <label class="check"><input type="checkbox" id="st-auto" ${s.auto_approve_listings ? 'checked' : ''}> Auto-approve listings for plans that don't require verification</label></div>
       <button class="btn primary" type="submit">Save settings</button>
     </form>
+    <form class="card form" id="f-fees" novalidate><h3>Withdrawal fee list</h3>
+      <p class="tip">The fee a user pays depends on how much they withdraw. Each row covers amounts up to the "Up to" amount, starting just above the row before it. The last row covers everything above. Changes show in the customer app straight away and apply to new withdrawals only.</p>
+      <div id="fee-rows">${feeRowsHtml(s.withdrawal_fee_tiers)}</div>
+      <div class="row"><button class="btn soft sm" type="button" data-act="fee-add">+ Add a row</button></div>
+      <div class="two"><div class="field"><label for="fee-try">Try an amount (₦)</label><input id="fee-try" inputmode="decimal" placeholder="e.g. 10000"></div><div class="field"><label>Fee / they receive</label><b id="fee-try-out" class="num">—</b></div></div>
+      <button class="btn primary" type="submit">Save fee list</button></form>
     <form class="card form" id="f-broadcast" novalidate><h3>Send a notification</h3>
       <div class="field"><label for="bc-title">Title</label><input id="bc-title" maxlength="120"></div>
       <div class="field"><label for="bc-body">Message</label><textarea id="bc-body"></textarea></div>
@@ -631,7 +664,8 @@ async function userSheet(id){
     ${d.withdrawals.length ? `<h3>Withdrawals</h3><div class="rows">${d.withdrawals.map(x => `<div class="tap" data-act="findtx" data-v="${esc(x.reference)}"><span class="grow sm">${esc(x.reference)}<br><span class="muted xs">${fmtDT(x.created_at)} · fee ${naira(x.fee_kobo)}</span></span>${pill(WST, x.status)}<span class="amt num">${naira(x.amount_kobo)}</span></div>`).join('')}</div>` : ''}
     ${d.ledger.length ? `<h3>Ledger</h3><div class="rows">${d.ledger.map(t => `<div class="tap" data-act="findtx" data-v="${esc(t.reference)}"><span class="grow sm">${esc(t.type.replace(/_/g, ' ').toLowerCase())} · ${esc(t.account.toLowerCase())}<br><span class="muted xs">${esc(t.description)} · ${esc(t.reference)} · ${fmtDT(t.created_at)}</span></span><span class="amt num ${t.amount_kobo > 0 ? 'in' : 'out'}">${t.amount_kobo > 0 ? '+' : '−'}${naira(Math.abs(t.amount_kobo))}</span></div>`).join('')}</div>` : ''}
     ${d.audit.length ? `<h3>Admin actions on this user</h3><div class="rows">${d.audit.map(a => `<div><span class="grow sm"><b>${esc(a.action.replace(/_/g, ' ').toLowerCase())}</b> by @${esc(a.admin || 'system')}<br><span class="muted xs">${esc(a.note || '')} · ${fmtDT(a.created_at)}</span></span></div>`).join('')}</div>` : ''}
-    ${self ? '' : `<form class="card form" id="f-udel" data-id="${id}" novalidate><h3>Delete account</h3><p class="tip warn">Only possible when the account has no money or order history (the ledger must stay complete). Otherwise suspend it above.</p>
+    ${self ? '' : `<form class="card form" id="f-udel" data-id="${id}" novalidate><h3>Delete account</h3><p class="tip warn">An account with no activity is removed completely. If it has money or order history, the history stays in the ledger but the name, phone, email and contact details are erased and the person can never sign in again. Their balance must be ₦0, with no active orders, open reports or waiting withdrawals. This cannot be undone.</p>
+      <div class="field"><label for="ud-why">Reason (saved in the audit log)</label><input id="ud-why"></div>
       <div class="field"><label for="ud-name">Type the username (${esc(u.username)}) to confirm</label><input id="ud-name" autocapitalize="none"></div>
       <button class="btn danger" type="submit" data-confirm="Tap again to delete">Delete account</button></form>`}`);
 }
@@ -744,6 +778,10 @@ document.addEventListener('click', async e => {
     case 'logout': await API.signOut(); loginScreen(); break;
     case 'filter': filter[el.dataset.k] = v; show(page, true); break;
     case 'copy': copyText(v); break;
+    case 'fee-add': { const rows = document.querySelectorAll('#fee-rows .feerow'), last = rows[rows.length - 1], div = document.createElement('div');
+      const prev = rows.length > 1 ? toKobo(rows[rows.length - 2].querySelector('.fr-up').value) : 0;
+      div.innerHTML = feeRowHtml({upto_kobo: prev + 10000000, bps: 900}, false); last.before(div.firstElementChild); feeTry(); break; }
+    case 'fee-del': { const rows = document.querySelectorAll('#fee-rows .feerow'); if (rows.length <= 1){ toast('Keep at least one row.'); break; } el.closest('.feerow').remove(); feeTry(); break; }
     case 'user': userSheet(id); break;
     case 'userid': closeSheet(); userSheet(id); break;
     case 'achat': chatSheet(id); break;
@@ -773,6 +811,8 @@ document.addEventListener('click', async e => {
 });
 document.addEventListener('input', e => { if (['pl-price','pl-seats','pl-min','pl-max'].includes(e.target.id)) planPreview(); });
 document.addEventListener('change', e => { if (e.target.id === 'ledger-type'){ filter.type = e.target.value; show('wallet', true); } });
+document.addEventListener('input', e => { if (e.target.closest && e.target.closest('#f-fees')) feeTry(); });
+document.addEventListener('change', e => { if (e.target.closest && e.target.closest('#f-fees')) feeTry(); });
 document.addEventListener('submit', async e => {
   e.preventDefault();
   const f = e.target, btn = f.querySelector('[type=submit]'), val = id => ($('#' + id) || {}).value || '', chk = id => !!($('#' + id) || {}).checked;
@@ -793,7 +833,11 @@ document.addEventListener('submit', async e => {
       starts_at:val('pr-start') ? new Date(val('pr-start')).toISOString() : null, ends_at:val('pr-end') ? new Date(val('pr-end')).toISOString() : null,
       requires_referral:chk('pr-req'), active:chk('pr-active')}}), 'Promotion saved.'); break;
     case 'f-uedit': run(btn, () => API.rpc('admin_edit_user', {p_id:f.dataset.id, p_full_name:val('ue-name'), p_phone:val('ue-phone'), p_note:'Edited in admin'}), 'Profile saved.'); break;
-    case 'f-udel': run(btn, () => API.rpc('admin_delete_user', {p_id:f.dataset.id, p_confirm:val('ud-name').trim()}), 'Account deleted.'); break;
+    case 'f-fees': run(btn, () => API.rpc('admin_save_fee_tiers', {p_tiers:readFeeRows()}), 'Fee list saved. The customer app uses it now.'); break;
+    case 'f-udel': {
+      if (!btn.dataset.armed){ btn.dataset.armed = '1'; const o = btn.innerHTML; btn.textContent = btn.dataset.confirm; setTimeout(() => { if (btn.isConnected){ delete btn.dataset.armed; btn.innerHTML = o; } }, 3500); break; }
+      delete btn.dataset.armed;
+      run(btn, async () => { await API.fn('admin-delete-user', {user_id:f.dataset.id, confirm:val('ud-name').trim(), note:val('ud-why').trim()}); }, 'Account removed.'); break; }
     case 'f-credit1': {
       if (!btn.dataset.armed){ btn.dataset.armed = '1'; const o = btn.innerHTML; btn.textContent = btn.dataset.confirm; setTimeout(() => { if (btn.isConnected){ delete btn.dataset.armed; btn.innerHTML = o; } }, 3500); break; }
       run(btn, async () => { const [uid] = await idsFor([val('c1-user').trim()]); await API.rpc('admin_credit_user', {p_user:uid, p_amount_kobo:toKobo(val('c1-amt')), p_reason:val('c1-why')}); }, 'Credit sent.'); break; }
