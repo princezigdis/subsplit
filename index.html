@@ -406,7 +406,7 @@ function nav(){
 }
 function foot(){
   const s = settings();
-  return `<div class="foot"><span>© ${new Date().getFullYear()} ${esc(s.site_name)}</span>${waUrl() ? `<a href="${esc(waUrl())}" target="_blank" rel="noopener">Chat with support on WhatsApp</a>` : ''}${s.support_email ? `<span>${esc(s.support_email)}</span>` : ''}<a href="https://whatsapp.com/channel/0029Vb93ZqsInlqXiLFPBM1U" target="_blank" rel="noopener">Join our WhatsApp channel</a><span><a href="/terms.html" target="_blank" rel="noopener">Terms</a> · <a href="/privacy.html" target="_blank" rel="noopener">Privacy</a> · <a href="/user-policy.html" target="_blank" rel="noopener">User policy</a> · <a href="/refund-policy.html" target="_blank" rel="noopener">Refunds</a></span></div>`;
+  return `<div class="foot"><span>© ${new Date().getFullYear()} ${esc(s.site_name)}</span>${waUrl() ? `<a href="${esc(waUrl())}" target="_blank" rel="noopener">Chat with support on WhatsApp</a>` : ''}${s.support_email ? `<span>${esc(s.support_email)}</span>` : ''}<a href="https://whatsapp.com/channel/0029Vb93ZqsInlqXiLFPBM1U" target="_blank" rel="noopener">Join our WhatsApp channel</a><span><a href="/terms.html" target="_blank" rel="noopener">Terms</a> · <a href="/privacy.html" target="_blank" rel="noopener">Privacy</a> · <a href="/user-policy.html" target="_blank" rel="noopener">User policy</a> · <a href="/refund-policy.html" target="_blank" rel="noopener">Refunds</a><a href="/help.html" target="_blank" rel="noopener">Help Centre</a></span></div>`;
 }
 
 /* ---------- Explore ---------- */
@@ -1101,6 +1101,10 @@ function resultSheet(ok, title, text, extra = ''){
 const app = $('#app');
 function render(){
   if (!S.catalog) return;
+  if (settings().maintenance){
+    app.innerHTML = `<main class="shell" style="text-align:center;padding-top:20vh"><h1 style="margin:0 0 10px">We'll be right back</h1><p class="muted">${esc(settings().maintenance)}</p>${waUrl() ? `<p><a href="${esc(waUrl())}" target="_blank" rel="noopener">Chat with support on WhatsApp</a></p>` : ''}</main>`;
+    document.title = settings().site_name || 'SplitSub'; return;
+  }
   const notice = settings().notice ? `<div class="notice">${esc(settings().notice)}</div>` : '';
   app.innerHTML = topBar() + `<main class="shell">${notice}${VIEWS[UI.tab]()}</main>` + nav();
   document.title = settings().site_name || 'SplitSub';
@@ -1205,7 +1209,7 @@ document.addEventListener('click', async e => {
 document.addEventListener('input', e => {
   if (e.target.id === 'w-amt') calcWithdraw();
   if (e.target.id === 'fc-buy' || e.target.id === 'fc-wd') calcFees();
-  if (e.target.id === 'q'){ UI.q = e.target.value; const items = filtered(); $('#feed').innerHTML = feedHTML(items); $('#count').textContent = `${items.length} plan${items.length === 1 ? '' : 's'}`; }
+  if (e.target.id === 'q'){ UI.q = e.target.value; clearTimeout(window.__sq); window.__sq = setTimeout(() => { const t = UI.q.trim(); if (t.length > 1) API.rpc('log_search', {p_term:t, p_results:filtered().length}).catch(() => {}); }, 1500); const items = filtered(); $('#feed').innerHTML = feedHTML(items); $('#count').textContent = `${items.length} plan${items.length === 1 ? '' : 's'}`; }
 });
 document.addEventListener('change', e => {
   if (e.target.id === 'h-plan'){ H.plan = e.target.value; const s = S.catalog.services.find(x => x.id === H.service), p = s.plans.find(x => x.id === H.plan); H.markup = p.max_markup_pct; H.seats = p.max_seats; renderCreate(); }

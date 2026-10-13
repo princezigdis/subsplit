@@ -59,6 +59,8 @@ Deno.serve(async (req: Request) => {
   const purpose = body.purpose === "SEAT" ? "SEAT" : "TOPUP";
 
   try {
+    const paused = await rpc("maintenance_on", {});
+    if (paused) return reply({ error: "Payments are paused for maintenance. " + paused }, 503);
     // 2. Database records the payment as PENDING and decides the amount.
     const reference = "SS-" + crypto.randomUUID().replace(/-/g, "").slice(0, 20).toUpperCase();
     const p = await rpc("payment_create", {

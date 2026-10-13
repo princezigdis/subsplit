@@ -214,7 +214,7 @@ const pill = (map, k) => P(...(map[k] || ['neutral', k]));
 
 const PAGES = [['dashboard','Dashboard','home'],['desk','Approval desk','check'],['search','Find transaction','search'],['users','Users','users'],['services','Services','grid'],['listings','Listings','list'],
   ['proofs','Proof verification','check'],['memberships','Memberships','seat'],['chats','Order chats','chat'],['payments','Payments','card'],['wallet','Wallet ledger','book'],['credits','Wallet credits','plus'],
-  ['withdrawals','Withdrawals','bank'],['disputes','Disputes','flag'],['support','Support','chat'],['requests','Subscription requests','list'],['promos','Referrals & promos','flag'],['audit','Audit logs','log'],['settings','Settings','cog']];
+  ['withdrawals','Withdrawals','bank'],['disputes','Disputes','flag'],['support','Support','chat'],['requests','Subscription requests','list'],['promos','Referrals & promos','flag'],['searches','Search history','search'],['audit','Audit logs','log'],['settings','Settings','cog']];
 let BADGE = {};
 let ME = null, DASH = null, SETTINGS = null, page = 'dashboard', filter = {}, cache = {};
 try { page = PAGES.some(p => p[0] === sessionStorage.getItem('admin-page')) ? sessionStorage.getItem('admin-page') : 'dashboard'; } catch(e){}
@@ -260,6 +260,21 @@ function shell(inner){
       <div class="tabs-x">${PAGES.map(navBtn).join('')}</div></div>
       <main class="main">${inner}</main></div></div>`;
 }
+
+function csvBtn(key){ return `<button class="btn line" data-act="csv" data-v="${key}" style="width:auto;padding:8px 14px">Download CSV</button>`; }
+function toCSV(rows){
+  const flat = (o, pre = '', out = {}) => { for (const [k, v] of Object.entries(o || {})){ const key = pre ? pre + '.' + k : k;
+    if (v && typeof v === 'object' && !Array.isArray(v)) flat(v, key, out); else out[key] = Array.isArray(v) ? JSON.stringify(v) : v; } return out; };
+  const fl = rows.map(r => flat(r)); const cols = [...new Set(fl.flatMap(r => Object.keys(r)))];
+  const q = v => { v = v == null ? '' : String(v); if (/^[=+\-@\t\r]/.test(v)) v = "'" + v; return '"' + v.replace(/"/g, '""') + '"'; };
+  return '﻿' + [cols.map(q).join(','), ...fl.map(r => cols.map(c => q(r[c])).join(','))].join('\r\n');
+}
+function downloadCSV(name, rows){
+  if (!rows || !rows.length){ toast('Nothing to download yet.'); return; }
+  const url = URL.createObjectURL(new Blob([toCSV(rows)], {type:'text/csv;charset=utf-8'}));
+  const a = document.createElement('a'); a.href = url; a.download = `splitsub-${name}-${new Date().toISOString().slice(0, 10)}.csv`; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000); toast('Downloaded.');
+}
 async function show(p, keepFilter){
   page = p; try { sessionStorage.setItem('admin-page', p); } catch(e){}
   if (!keepFilter) filter = {};
@@ -297,7 +312,7 @@ const PAGE = {
 
   async users(){
     const list = cache.users = await API.rpc('admin_users', {p_search:filter.q || ''});
-    return `<div class="ptitle"><h1>Users</h1><span class="muted">${list.length} shown</span></div>
+    return `<div class="ptitle"><h1>Users</h1><span class="muted">${list.length} shown</span>${csvBtn('users')}</div>
     <form class="search" id="f-usearch"><input id="u-q" type="search" placeholder="Name, @username, email or phone" value="${esc(filter.q || '')}"><button class="btn primary">Search</button></form>
     <div class="rows">${list.length ? list.map(u => `<div class="tap" data-act="user" data-id="${u.id}">
       <span class="grow"><b>${esc(u.full_name || u.email)}</b> <span class="muted sm">@${esc(u.username)}</span><br><span class="muted xs">${esc(u.email)} · ${esc(u.phone || 'no phone')} · joined ${fmtD(u.created_at)}</span></span>
@@ -333,7 +348,7 @@ const PAGE = {
   async memberships(){
     const st = filter.status ?? 'ACTIVE';
     const list = cache.memberships = await API.rpc('admin_memberships', {p_status:st});
-    return `<div class="ptitle"><h1>Memberships</h1></div>
+    return `<div class="ptitle"><h1>Memberships</h1>${csvBtn('memberships')}</div>
     ${chipsFor('status', [['ACTIVE','Active'],['DISPUTED','Disputed'],['COMPLETED','Completed'],['REFUNDED','Refunded'],['PARTIALLY_REFUNDED','Part refunded'],['','All']], st)}
     <div class="rows">${list.length ? list.map(m => `<div class="tap" data-act="membership" data-id="${m.id}">
       <span class="grow"><b>${esc(m.service)} · ${esc(m.plan)}</b><br><span class="muted xs">${esc(m.txn_ref || '')} · @${esc(m.buyer)} → host @${esc(m.host)} · ${fmtD(m.starts_at)} – ${fmtD(m.ends_at)} · money ${m.escrow.toLowerCase()}${m.escrow === 'HELD' ? ' until ' + fmtD(m.release_at) : ''}</span></span>
@@ -342,8 +357,8 @@ const PAGE = {
 
   async payments(){
     const st = filter.status ?? '';
-    const list = await API.rpc('admin_payments', {p_status:st});
-    return `<div class="ptitle"><h1>Payments (Paystack)</h1></div>
+    const list = cache.payments = await API.rpc('admin_payments', {p_status:st});
+    return `<div class="ptitle"><h1>Payments (Paystack)</h1>${csvBtn('payments')}</div>
     ${chipsFor('status', [['','All'],['PENDING','Pending'],['SUCCESS','Success'],['FAILED','Failed'],['ABANDONED','Cancelled']], st)}
     <p class="tip">Every payment is verified with Paystack on the server before money reaches a wallet. A pending payment can be re-checked here.</p>
     <div class="rows">${list.length ? list.map(x => `<div>
@@ -353,8 +368,9 @@ const PAGE = {
 
   async wallet(){
     const [bad, list] = await Promise.all([API.rpc('admin_ledger_check'), API.rpc('admin_ledger', {p_type:filter.type || ''})]);
+    cache.ledger = list;
     const types = ['','TOP_UP','SUBSCRIPTION','PURCHASE_FEE','HOST_EARNING_PENDING','PENDING_RELEASED','HOST_EARNING','PLATFORM_FEE','REFUND','EARNING_REVERSED','WITHDRAWAL','WITHDRAWAL_FEE','WITHDRAWAL_REVERSED','TRANSFER_IN','TRANSFER_OUT','ADJUSTMENT','ADMIN_CREDIT','REFERRAL_REWARD'];
-    return `<div class="ptitle"><h1>Wallet ledger</h1><select id="ledger-type" style="max-width:240px">${types.map(t => `<option value="${t}" ${t === (filter.type || '') ? 'selected' : ''}>${t ? t.replace(/_/g, ' ').toLowerCase() : 'All types'}</option>`).join('')}</select></div>
+    return `<div class="ptitle"><h1>Wallet ledger</h1><select id="ledger-type" style="max-width:240px">${types.map(t => `<option value="${t}" ${t === (filter.type || '') ? 'selected' : ''}>${t ? t.replace(/_/g, ' ').toLowerCase() : 'All types'}</option>`).join('')}</select>${csvBtn('ledger')}</div>
     ${bad.length ? `<div class="tip bad"><b>${bad.length} account(s) don't match their ledger.</b> ${bad.map(b => `@${esc(b.owner || 'SplitSub')} ${b.kind}: balance ${naira(b.balance_kobo)} vs ledger ${naira(b.ledger_kobo)}`).join('; ')}</div>` : `<p class="tip good">Every balance matches its ledger.</p>`}
     <p class="tip">Every balance change is a row here. Balances are never edited directly. To correct one, use Users → Adjust balance (it adds a ledger row and an audit log).</p>
     <div class="rows">${list.length ? list.map(t => `<div><span class="grow"><b>${esc(t.type.replace(/_/g, ' ').toLowerCase())}</b> <span class="muted sm">@${esc(t.user)} · ${esc(t.account.toLowerCase())}</span><br><span class="muted xs">${esc(t.description)} · ${esc(t.reference)} · ${fmtDT(t.created_at)}</span></span>
@@ -363,8 +379,8 @@ const PAGE = {
 
   async withdrawals(){
     const st = filter.status ?? 'PENDING';
-    const list = await API.rpc('admin_withdrawals', {p_status:st});
-    return `<div class="ptitle"><h1>Withdrawals</h1></div>
+    const list = cache.withdrawals = await API.rpc('admin_withdrawals', {p_status:st});
+    return `<div class="ptitle"><h1>Withdrawals</h1>${csvBtn('withdrawals')}</div>
     ${chipsFor('status', [['PENDING','Requested'],['APPROVED','Approved'],['PAID','Paid'],['REJECTED','Rejected'],['','All']], st)}
     <p class="tip">Send the money from your bank app or Paystack Transfers first, then tap “Mark as paid”. Rejecting returns the money to the host's earnings.</p>
     <div class="grid">${list.length ? list.map(w => `<div class="card">
@@ -425,6 +441,10 @@ const PAGE = {
         <div class="field"><label for="st-text">Text under the headline</label><textarea id="st-text">${esc(s.hero_text)}</textarea></div>
         <div class="field"><label for="st-notice">Announcement banner (empty = hidden)</label><input id="st-notice" value="${esc(s.notice)}"></div>
         <div class="field"><label for="st-cats">Categories (comma separated)</label><input id="st-cats" value="${esc((s.categories || []).join(', '))}"></div></div>
+      <div class="card form"><h3>Maintenance mode</h3>
+        <label class="check"><input type="checkbox" id="st-maint" ${s.maintenance_mode ? 'checked' : ''}> Pause the website (customers see a message and cannot buy)</label>
+        <div class="field"><label for="st-maintmsg">Message customers will see</label><input id="st-maintmsg" maxlength="300" value="${esc(s.maintenance_message || '')}"></div>
+        <small>Use this while you fix something. Existing orders and your admin site keep working. Remember to switch it off and tap Save.</small></div>
       <div class="card form"><h3>Support contacts</h3>
         <div class="field"><label for="st-walink">WhatsApp Support Link</label><input id="st-walink" inputmode="url" autocapitalize="none" value="${esc(s.support_whatsapp_link || '')}" placeholder="https://wa.me/2348012345678"><small>Customers tap this to chat with you. Use a wa.me link or a chat.whatsapp.com invite link. Empty = hide the button.</small></div>
         <div class="two"><div class="field"><label for="st-wa">Old WhatsApp number (digits, optional)</label><input id="st-wa" inputmode="tel" value="${esc(s.support_whatsapp)}" placeholder="2348012345678"></div>
@@ -540,6 +560,16 @@ const PAGE = {
       <button class="btn danger" type="submit" data-confirm="Tap again: credit everyone">Credit everyone</button></form>`;
   },
 
+  async searches(){
+    const days = +(filter.days || 30);
+    const r = cache.searchData = await API.rpc('admin_top_searches', {p_days:days});
+    cache.searches = r.top;
+    return `<div class="ptitle"><h1>Search history</h1>${csvBtn('searches')}</div>
+    ${chipsFor('days', [['7','7 days'],['30','30 days'],['90','90 days'],['365','1 year']], String(days))}
+    <p class="tip">What people type in the search box on the website. ${r.total} searches in this period. “No results” shows what customers want that you do not have yet. Add those services in Services.</p>
+    ${r.no_results.length ? `<h3>Wanted but not found</h3><div class="rows">${r.no_results.map(x => `<div><span class="grow"><b>${esc(x.term)}</b><br><span class="muted xs">last ${fmtDT(x.last_at)}</span></span><span class="muted">${x.searches}×</span><button class="btn soft" data-act="svc-from-search" data-v="${esc(x.term)}" style="width:auto;padding:6px 12px">Add service</button></div>`).join('')}</div>` : ''}
+    <h3>Top searches</h3><div class="rows">${r.top.length ? r.top.map((x, i) => `<div><span class="muted" style="width:26px">${i + 1}</span><span class="grow"><b>${esc(x.term)}</b><br><span class="muted xs">${x.people} ${x.people === 1 ? 'person' : 'people'} · avg ${x.avg_results} result${x.avg_results === 1 ? '' : 's'} · last ${fmtDT(x.last_at)}</span></span><b>${x.searches}</b></div>`).join('') : '<div><span class="muted">No searches yet. They will show here once people use the search box.</span></div>'}</div>`;
+  },
   async audit(){
     const list = await API.rpc('admin_audit_logs');
     const changed = a => { if (!a.old_data || !a.new_data) return ''; const keys = Object.keys(a.new_data).filter(k => JSON.stringify(a.old_data[k]) !== JSON.stringify(a.new_data[k]) && !['updated_at'].includes(k));
@@ -816,6 +846,8 @@ document.addEventListener('click', async e => {
     case 'membership': membershipSheet(id); break;
     case 'ticket': ticketSheet(id); break;
     case 'logo-clear': $('#sv-logo').value = ''; $('#sv-prev').textContent = (($('#sv-name') || {}).value || '?').slice(0,1).toUpperCase(); break;
+    case 'csv': downloadCSV(v, cache[v]); break;
+    case 'svc-from-search': { await serviceSheet(); const n = $('#sv-name'); if (n) n.value = v.replace(/\b\w/g, c => c.toUpperCase()); break; }
     case 'proof': try { window.open(await API.signedUrl('host-proofs', v, 600), '_blank', 'noopener'); } catch(err){ toast(err.message); } break;
     case 'review': run(el, () => API.rpc('admin_review_listing', {p_id:id, p_action:v, p_note:$('#rv-note').value}), 'Listing updated.'); break;
     case 'recheck': run(el, async () => { const r = await API.fn('payments-verify', {reference:v}); toast(r.message || r.status); }, 'Checked with Paystack.'); break;
@@ -835,7 +867,7 @@ async function pickImage(file, folder, hid, prev, msg, isLogo){
   try {
     const ext = (file.name.split('.').pop() || 'png').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 5) || 'png';
     const path = `${folder}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
-    await API.upload('promo-banners', path, file);
+    await API.upload('promo-banners', path, file, false);
     const url = API.publicUrl('promo-banners', path);
     $(hid).value = url; $(prev).innerHTML = `<img src="${esc(url)}" alt="">`; m.textContent = 'Uploaded. Tap Save to keep it.';
   } catch(err){ m.textContent = 'Upload failed: ' + err.message; }
@@ -898,7 +930,7 @@ document.addEventListener('submit', async e => {
     case 'f-settings': run(btn, () => API.rpc('admin_save_settings', {p:{site_name:val('st-name'), hero_title:val('st-title'), hero_text:val('st-text'), notice:val('st-notice'),
       categories:val('st-cats').split(',').map(c => c.trim()).filter(Boolean), support_whatsapp:val('st-wa'), support_whatsapp_link:val('st-walink').trim(), support_email:val('st-email').trim(),
       min_withdrawal_kobo:toKobo(val('st-minw')), min_topup_kobo:toKobo(val('st-mint')), max_topup_kobo:toKobo(val('st-maxt')),
-      renewal_window_days:+val('st-renew'), reminder_days:+val('st-remind'), auto_approve_listings:chk('st-auto')}}), 'Settings saved.'); break;
+      renewal_window_days:+val('st-renew'), reminder_days:+val('st-remind'), auto_approve_listings:chk('st-auto'), maintenance_mode:chk('st-maint'), maintenance_message:val('st-maintmsg')}}), 'Settings saved.'); break;
     case 'f-broadcast': {
       if (!btn.dataset.armed){ btn.dataset.armed = '1'; const o = btn.innerHTML; btn.textContent = btn.dataset.confirm; setTimeout(() => { if (btn.isConnected){ delete btn.dataset.armed; btn.innerHTML = o; } }, 3500); break; }
       run(btn, async () => { const n = await API.rpc('admin_broadcast', {p_title:val('bc-title'), p_body:val('bc-body'), p_username:val('bc-user').trim() || null}); toast(`Sent to ${n} user(s).`); }, 'Notification sent.'); break; }

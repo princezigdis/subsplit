@@ -124,9 +124,9 @@
     updatePassword(password) { return authed('/auth/v1/user', { method: 'PUT', body: { password } }); },
     rpc(fn, args) { return authed('/rest/v1/rpc/' + fn, { body: args || {} }); },
     fn(name, body) { return authed('/functions/v1/' + name, { body: body || {} }); },
-    upload(bucket, path, file) {
+    upload(bucket, path, file, upsert) {
       return authed('/storage/v1/object/' + bucket + '/' + enc(path),
-        { body: file, json: false, headers: { 'Content-Type': file.type || 'application/octet-stream', 'x-upsert': 'true' } });
+        { body: file, json: false, headers: { 'Content-Type': file.type || 'application/octet-stream', 'x-upsert': upsert === false ? 'false' : 'true' } });
     },
     publicUrl(bucket, path) { return BASE + '/storage/v1/object/public/' + bucket + '/' + enc(path); },
     async signedUrl(bucket, path, seconds) {
