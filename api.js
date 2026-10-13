@@ -128,6 +128,7 @@
       return authed('/storage/v1/object/' + bucket + '/' + enc(path),
         { body: file, json: false, headers: { 'Content-Type': file.type || 'application/octet-stream', 'x-upsert': 'true' } });
     },
+    publicUrl(bucket, path) { return BASE + '/storage/v1/object/public/' + bucket + '/' + enc(path); },
     async signedUrl(bucket, path, seconds) {
       const j = await authed('/storage/v1/object/sign/' + bucket + '/' + enc(path), { body: { expiresIn: seconds || 600 } });
       const u = j.signedURL || j.signedUrl || '';

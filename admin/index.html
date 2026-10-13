@@ -18,6 +18,7 @@
   Hiding this page is NOT the security: the database is.
 -->
 <style>
+.logo-up{display:flex;gap:12px;align-items:center;flex-wrap:wrap}.logo-prev{width:56px;height:56px;border-radius:14px;display:grid;place-items:center;color:#fff;font-weight:800;font-size:22px;overflow:hidden}.logo-prev img,.banner-prev img{width:100%;height:100%;object-fit:cover}.banner-prev{width:120px;height:60px;border-radius:12px;background:#eee;overflow:hidden;display:block}.proof-view{margin:10px 0;text-align:center}.proof-view img{max-width:100%;max-height:60vh;border-radius:12px;border:1px solid #0002}.proof-view iframe{width:100%;height:60vh;border:0;border-radius:12px}
 :root{
   --bg:#F4F4F9; --surface:#FFFFFF; --surface-2:#EFEFF6; --ink:#17172B; --muted:#6B6B85; --line:#E3E3EE;
   --brand:#5B5BD6; --brand-ink:#FFFFFF; --brand-soft:#ECECFD; --brand-strong:#3F3FB0;
@@ -589,11 +590,21 @@ async function proofSheet(id){
     <div class="kv"><div><span>Host</span><b>@${esc(h.host)} · ${esc(h.host_name)}${h.host_verified ? ' ✓' : ''}</b></div><div><span>Contact</span><b>${esc(h.host_email)} · ${esc(h.host_phone || '—')}</b></div>
       <div><span>Submitted</span><b>${fmtDT(h.submitted_at)}</b></div><div><span>Listing</span><b>${esc(h.listing_status.toLowerCase())}</b></div>
       <div><span>30-day escrow agreement</span><b>${h.agreement_at ? 'Accepted ' + fmtDT(h.agreement_at) : 'Not accepted'}</b></div><div><span>Proof status</span><b>${esc(h.status.toLowerCase())}</b></div></div>
-    ${h.file_path ? `<button class="btn soft" data-act="proof" data-v="${esc(h.file_path)}">View proof file</button>` : ''}
+    ${h.file_path ? `<div class="proof-view" id="proof-view"><small>Loading picture…</small></div>` : '<p class="tip">The host sent no file.</p>'}
     ${h.note ? `<p class="secret">Host says: ${esc(h.note)}</p>` : ''}${h.reason ? `<p class="tip">Decision reason: ${esc(h.reason)}</p>` : ''}
     <button class="btn line" data-act="listing" data-id="${h.listing_id}">Open the listing</button>
     ${h.status === 'PENDING' ? `<div class="field"><label for="pf-note">Reason (shown to the host if you reject)</label><textarea id="pf-note"></textarea></div>
       <div class="wrap-row"><button class="btn good" data-act="pdecide" data-id="${h.id}" data-v="APPROVE" data-confirm="Tap again to approve">Approve</button><button class="btn danger" data-act="pdecide" data-id="${h.id}" data-v="REJECT" data-confirm="Tap again to reject">Reject</button></div>` : ''}`);
+  if (h.file_path) showProof(h.file_path);
+}
+async function showProof(path){
+  const box = $('#proof-view'); if (!box) return;
+  try {
+    const url = await API.signedUrl('host-proofs', path, 600);
+    const pdf = /\.pdf$/i.test(path);
+    box.innerHTML = pdf ? `<iframe src="${esc(url)}" title="Proof"></iframe>` : `<a href="${esc(url)}" target="_blank" rel="noopener"><img src="${esc(url)}" alt="Proof sent by the host"></a>`;
+    box.insertAdjacentHTML('beforeend', `<div><a class="btn line" href="${esc(url)}" target="_blank" rel="noopener" style="display:inline-block">Open full size</a></div>`);
+  } catch(err){ box.innerHTML = `<p class="tip">Could not load the picture: ${esc(err.message)}</p>`; }
 }
 function reqSheet(id){
   const r = cache.requests.find(x => x.id === id); if (!r) return;
@@ -610,7 +621,10 @@ function promoSheet(id){
   const dt = t => t ? new Date(new Date(t).getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16) : '';
   openSheet(id ? 'Edit promotion' : 'New promotion', `<form class="form" id="f-promo" data-id="${id || ''}" novalidate>
     <div class="field"><label for="pr-title">Promo title</label><input id="pr-title" maxlength="80" value="${esc(p.title)}"></div>
-    <div class="field"><label for="pr-banner">Banner image link (https://…)</label><input id="pr-banner" value="${esc(p.banner_url)}"></div>
+    <div class="field"><label>Banner picture</label>
+      <div class="logo-up"><span id="pr-prev" class="banner-prev">${p.banner_url ? `<img src="${esc(p.banner_url)}" alt="">` : ''}</span>
+      <label class="btn soft" style="display:inline-block;cursor:pointer">Upload picture<input type="file" id="pr-file" accept="image/png,image/jpeg,image/webp" hidden></label></div>
+      <input id="pr-banner" type="hidden" value="${esc(p.banner_url)}"><small id="pr-up-msg">PNG, JPG or WEBP, up to 2 MB.</small></div>
     <div class="field"><label for="pr-desc">Description</label><textarea id="pr-desc">${esc(p.description)}</textarea></div>
     <div class="field"><label for="pr-terms">Terms</label><textarea id="pr-terms">${esc(p.terms)}</textarea></div>
     <div class="two"><div class="field"><label for="pr-ref">Reward for the inviter (₦)</label><input id="pr-ref" inputmode="decimal" value="${nairaInput(p.reward_referrer_kobo)}"></div>
@@ -677,7 +691,11 @@ function serviceSheet(id){
     <div class="field"><label for="sv-name">Service name</label><input id="sv-name" value="${esc(s.name)}" placeholder="e.g. Netflix"></div>
     <div class="two"><div class="field"><label for="sv-cat">Category</label><select id="sv-cat">${cats.map(c => `<option ${c === s.category ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select></div>
     <div class="field"><label for="sv-color">Logo colour</label><input id="sv-color" type="color" value="${esc(s.logo_color)}"></div></div>
-    <div class="field"><label for="sv-logo">Logo image URL (optional)</label><input id="sv-logo" value="${esc(s.logo_url)}" placeholder="https://…/logo.png"><small>Leave empty to show the first letter on the colour.</small></div>
+    <div class="field"><label>Logo picture (optional)</label>
+      <div class="logo-up"><span id="sv-prev" class="logo-prev" style="background:${esc(s.logo_color)}">${s.logo_url ? `<img src="${esc(s.logo_url)}" alt="">` : esc((s.name || '?').slice(0,1).toUpperCase())}</span>
+      <div><label class="btn soft" style="display:inline-block;cursor:pointer">Upload picture<input type="file" id="sv-file" accept="image/png,image/jpeg,image/webp,image/svg+xml" hidden></label>
+      <button type="button" class="btn line" data-act="logo-clear">Remove</button></div></div>
+      <input id="sv-logo" type="hidden" value="${esc(s.logo_url)}"><small id="sv-up-msg">PNG, JPG, WEBP or SVG, up to 2 MB. Empty = first letter on the colour.</small></div>
     <div class="field"><label for="sv-desc">Short description</label><input id="sv-desc" value="${esc(s.description)}"></div>
     <div class="field"><label for="sv-rules">Allowed sharing method (shown to customers and hosts)</label><textarea id="sv-rules">${esc(s.sharing_rules)}</textarea><small>Describe how the real service allows sharing. If it does not allow sharing, switch the service off.</small></div>
     <div class="field"><label for="sv-notes">Admin notes (private)</label><textarea id="sv-notes">${esc(s.notes)}</textarea></div>
@@ -797,6 +815,7 @@ document.addEventListener('click', async e => {
     case 'listing': listingSheet(id); break;
     case 'membership': membershipSheet(id); break;
     case 'ticket': ticketSheet(id); break;
+    case 'logo-clear': $('#sv-logo').value = ''; $('#sv-prev').textContent = (($('#sv-name') || {}).value || '?').slice(0,1).toUpperCase(); break;
     case 'proof': try { window.open(await API.signedUrl('host-proofs', v, 600), '_blank', 'noopener'); } catch(err){ toast(err.message); } break;
     case 'review': run(el, () => API.rpc('admin_review_listing', {p_id:id, p_action:v, p_note:$('#rv-note').value}), 'Listing updated.'); break;
     case 'recheck': run(el, async () => { const r = await API.fn('payments-verify', {reference:v}); toast(r.message || r.status); }, 'Checked with Paystack.'); break;
@@ -808,6 +827,22 @@ document.addEventListener('click', async e => {
     case 'mrelease': run(el, () => API.rpc('admin_release', {p_id:id, p_note:$('#ms-note').value}), 'Released to the host.'); break;
     case 'tclose': run(el, () => API.rpc('admin_reply_ticket', {p_id:id, p_body:$('#tr-body').value, p_close:true}), 'Conversation closed.'); break;
   }
+});
+async function pickImage(file, folder, hid, prev, msg, isLogo){
+  const m = $(msg); if (!file) return;
+  if (file.size > 2097152){ m.textContent = 'Too big. Use a picture under 2 MB.'; return; }
+  m.textContent = 'Uploading…';
+  try {
+    const ext = (file.name.split('.').pop() || 'png').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 5) || 'png';
+    const path = `${folder}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+    await API.upload('promo-banners', path, file);
+    const url = API.publicUrl('promo-banners', path);
+    $(hid).value = url; $(prev).innerHTML = `<img src="${esc(url)}" alt="">`; m.textContent = 'Uploaded. Tap Save to keep it.';
+  } catch(err){ m.textContent = 'Upload failed: ' + err.message; }
+}
+document.addEventListener('change', e => {
+  if (e.target.id === 'sv-file') pickImage(e.target.files[0], 'logos', '#sv-logo', '#sv-prev', '#sv-up-msg', true);
+  if (e.target.id === 'pr-file') pickImage(e.target.files[0], 'banners', '#pr-banner', '#pr-prev', '#pr-up-msg');
 });
 document.addEventListener('input', e => { if (['pl-price','pl-seats','pl-min','pl-max'].includes(e.target.id)) planPreview(); });
 document.addEventListener('change', e => { if (e.target.id === 'ledger-type'){ filter.type = e.target.value; show('wallet', true); } });
