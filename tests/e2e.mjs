@@ -1,4 +1,4 @@
-// End-to-end test: customer app + admin app + real SQL + real Edge Function code + fake Paystack.
+// End-to-end test: customer app + admin app + real SQL + real Edge Function code + fake Flutterwave.
 import { createRequire } from 'node:module';
 const { chromium } = createRequire(import.meta.url)(process.env.NODE_PATH + '/playwright');
 import { execFileSync } from 'node:child_process';
@@ -82,10 +82,8 @@ await step('admin', async () => {
   check('Listing shows the saved escrow agreement', (await admin.textContent('#sheet-box')).includes('accepted the 30-day escrow agreement'));
   await admin.click('#sheet-box [data-act=close]');
   await admin.click('.side [data-v=proofs]'); await admin.waitForSelector('h1:has-text("Proof of purchase")');
-  await admin.click('[data-act=proofsheet]'); await admin.waitForSelector('[data-act=proof]');
-  const [pop] = await Promise.all([admin.waitForEvent('popup'), admin.click('[data-act=proof]')]);
-  check('Admin can open the private proof file', pop.url().includes('/sign-local/host-proofs/'));
-  await pop.close();
+  await admin.click('[data-act=proofsheet]'); await admin.waitForSelector('#proof-view img, #proof-view iframe');
+  check('Admin sees the private proof file inline', (await admin.getAttribute('#proof-view img, #proof-view iframe', 'src')).includes('/sign-local/host-proofs/'));
   await admin.fill('#pf-note', 'Blurry, please re-upload.');
   await admin.click('[data-act=pdecide][data-v=REJECT]'); await admin.click('[data-act=pdecide][data-v=REJECT]'); await toast(admin);
   check('Rejected proof sends the listing back to the host', sql(`select status || '/' || proof_status from listings`) === 'REJECTED/REJECTED');
@@ -115,16 +113,16 @@ await step('buyer explore', async () => {
   await buyer.screenshot({ path: SHOTS + '/2-explore.png' });
 });
 let seatRef = '';
-await step('buyer pays for seat with Paystack', async () => {
+await step('buyer pays for seat with Flutterwave', async () => {
   await buyer.click('#feed .card [data-act=join]'); await buyer.waitForSelector('text=Confirm your seat');
   const t = await buyer.textContent('#sheet-box');
   check('Confirm screen shows service, price, ₦200 fee, total ₦2,750', ['Netflix · Premium', '₦2,550/month', '30 days', 'Shared login', '@host', 'Available seats', 'Transaction fee', '₦200', 'Total to pay', '₦2,750'].every(x => t.includes(x)));
   await buyer.screenshot({ path: SHOTS + '/3-confirm.png' });
-  await buyer.click('[data-act=payCard]'); await buyer.waitForURL(/paystack\/checkout/);
+  await buyer.click('[data-act=payCard]'); await buyer.waitForURL(/flw\/checkout/);
   seatRef = buyer.url().split('/').pop();
   check('Seat payment amount set by backend (₦2,550 + ₦200 fee)', (await buyer.textContent('body')).includes('NGN 2,750'));
   await buyer.click('#pay'); await buyer.waitForSelector("text=You're in!");
-  check('After Paystack: seat reserved, money verified on server', sql(`select status || '/' || paid_kobo || '/' || (membership_id is not null) from payments where reference = '${seatRef}'`) === 'SUCCESS/275000/true');
+  check('After Flutterwave: seat reserved, money verified on server', sql(`select status || '/' || paid_kobo || '/' || (membership_id is not null) from payments where reference = '${seatRef}'`) === 'SUCCESS/275000/true');
   check('Wallet nets to ₦0 (credited then charged)', wallet('buyer@subsplit.ng') === 0);
   await buyer.click('#sheet-box [data-act=close]');
   await buyer.waitForSelector('.card:has-text("Netflix")');
@@ -135,7 +133,7 @@ await step('buyer pays for seat with Paystack', async () => {
 });
 await step('duplicate + fake payments', async () => {
   const r1 = await (await fetch(`${B}/test/webhook/${seatRef}`)).text(), r2 = await (await fetch(`${B}/test/webhook/${seatRef}`)).text();
-  check('Duplicate Paystack webhooks accepted but credit nothing extra', r1 === 'ok' && r2 === 'ok' && wallet('buyer@subsplit.ng') === 0 && sql(`select count(*) from wallet_transactions where payment_reference = '${seatRef}' and type = 'TOP_UP'`) === '1');
+  check('Duplicate Flutterwave webhooks accepted but credit nothing extra', r1.includes('true') && r2.includes('true') && wallet('buyer@subsplit.ng') === 0 && sql(`select count(*) from wallet_transactions where payment_reference = '${seatRef}' and type = 'TOP_UP'`) === '1');
   const bad = await fetch(`${B}/test/webhook/${seatRef}?bad=1`);
   check('Webhook with a wrong signature is rejected (401)', bad.status === 401);
   // start a top-up but never pay, then pretend success from the browser
@@ -190,7 +188,7 @@ await step('order chat', async () => {
   await buyer.goto(B); await buyer.click('.nav [data-v=mysubs]');
   await buyer.click('.card:has-text("Netflix") [data-act=receipt]'); await buyer.waitForSelector('text=Purchase receipt');
   const rt = await buyer.textContent('#sheet-box');
-  check('Receipt shows ID, price, ₦200 fee, total, method, status', ['Transaction ID', 'SUB-', '₦2,550', '₦200', '₦2,750', 'Paystack', 'Successful'].every(x => rt.includes(x)), rt.slice(0, 300));
+  check('Receipt shows ID, price, ₦200 fee, total, method, status', ['Transaction ID', 'SUB-', '₦2,550', '₦200', '₦2,750', 'Flutterwave', 'Successful'].every(x => rt.includes(x)), rt.slice(0, 300));
   const [dl] = await Promise.all([buyer.waitForEvent('download'), buyer.click('[data-act=rcptpdf]')]);
   const path = await dl.path(); const head = (await import('node:fs')).readFileSync(path).slice(0, 8).toString();
   check('Receipt downloads as a real PDF', head.startsWith('%PDF-1.4') && dl.suggestedFilename().endsWith('.pdf'), head);

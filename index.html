@@ -202,6 +202,7 @@ textarea{min-height:100px;resize:vertical}
 .kv>div:last-child{border-bottom:0}
 .kv span{color:var(--muted)}
 .kv b{text-align:right}
+.kv .chip{padding:4px 10px;font-size:12px;flex:none}
 .kv .total{background:var(--brand-soft);color:var(--brand-strong)}
 .kv .total span{color:var(--brand-strong)}
 .secret{white-space:pre-wrap;background:var(--surface-2);border-radius:var(--r);padding:14px;font-size:15px;overflow-wrap:anywhere}
@@ -406,7 +407,7 @@ function nav(){
 }
 function foot(){
   const s = settings();
-  return `<div class="foot"><span>© ${new Date().getFullYear()} ${esc(s.site_name)}</span>${waUrl() ? `<a href="${esc(waUrl())}" target="_blank" rel="noopener">Chat with support on WhatsApp</a>` : ''}${s.support_email ? `<span>${esc(s.support_email)}</span>` : ''}<a href="https://whatsapp.com/channel/0029Vb93ZqsInlqXiLFPBM1U" target="_blank" rel="noopener">Join our WhatsApp channel</a><span><a href="/terms.html" target="_blank" rel="noopener">Terms</a> · <a href="/privacy.html" target="_blank" rel="noopener">Privacy</a> · <a href="/user-policy.html" target="_blank" rel="noopener">User policy</a> · <a href="/refund-policy.html" target="_blank" rel="noopener">Refunds</a><a href="/help.html" target="_blank" rel="noopener">Help Centre</a></span></div>`;
+  return `<div class="foot"><span>© ${new Date().getFullYear()} ${esc(s.site_name)}</span>${waUrl() ? `<a href="${esc(waUrl())}" target="_blank" rel="noopener">Chat with support on WhatsApp</a>` : ''}${s.support_email ? `<span>${esc(s.support_email)}</span>` : ''}<a href="https://whatsapp.com/channel/0029Vb93ZqsInlqXiLFPBM1U" target="_blank" rel="noopener">Join our WhatsApp channel</a><span><a href="/terms.html" target="_blank" rel="noopener">Terms</a> · <a href="/privacy.html" target="_blank" rel="noopener">Privacy</a> · <a href="/user-policy.html" target="_blank" rel="noopener">User policy</a> · <a href="/refund-policy.html" target="_blank" rel="noopener">Refunds</a><a href="/help.html" target="_blank" rel="noopener">Help Centre</a> · <a role="button" tabindex="0" data-act="partner" style="cursor:pointer">Collaborate or invest</a></span></div>`;
 }
 
 /* ---------- Explore ---------- */
@@ -630,6 +631,9 @@ function viewAccount(){
     <p class="sm muted">Share your code. When a friend signs up with it and makes a first purchase, you both can earn rewards while a promotion is running.</p>
     <div class="kv"><div><span>Your code</span><b>${esc(S.refs.code)}</b></div><div><span>Friends invited</span><b>${S.refs.invited}</b></div><div><span>Rewarded</span><b>${S.refs.rewarded} · ${naira(S.refs.earned_kobo)}</b></div></div>
     <div class="wrap-row"><button class="btn primary sm" data-act="shareref">${ic('share')} Share invite link</button><button class="btn line sm" data-act="copy" data-v="${esc(S.refs.code)}">${ic('copy')} Copy code</button></div></div>` : ''}
+  <div class="card"><h3>Collaborate or invest</h3>
+    <p class="sm muted">Want to partner with ${esc(settings().site_name)}, or invest in what we are building? Send us a message and we will reply.</p>
+    <div class="wrap-row"><button class="btn primary sm" data-act="partner">${ic('chat')} Message us</button></div></div>
   <form class="card form" id="f-profile" novalidate>
     <h3>Your details</h3>
     <div class="field"><label for="p-name">Full name</label><input id="p-name" value="${esc(p.full_name)}" autocomplete="name"></div>
@@ -651,7 +655,7 @@ function openSheet(title, body){
   $('#sheet-box').innerHTML = `<span class="grab"></span><div class="row between"><h2>${title}</h2><button class="x" data-act="close" aria-label="Close">${ic('x')}</button></div>${body}`;
   $('#sheet').hidden = false; document.body.style.overflow = 'hidden'; $('#sheet-box').scrollTop = 0;
 }
-function closeSheet(){ if (typeof stopChat === 'function') stopChat(); $('#sheet').hidden = true; document.body.style.overflow = ''; }
+function closeSheet(){ if (typeof stopChat === 'function') stopChat(); if (typeof MT !== 'undefined') clearInterval(MT); $('#sheet').hidden = true; document.body.style.overflow = ''; }
 let toastT;
 function toast(msg){ const t = $('#toast'); t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => t.hidden = true, 4200); }
 function needAuth(){ if (!S.me){ authSheet(); return true; } return false; }
@@ -676,7 +680,8 @@ async function detailSheet(id){
       ${l.note ? `<div>${ic('chat')}<span class="grow"><b>Note from the host</b><span>${esc(l.note)}</span></span></div>` : ''}
       ${l.sharing_rules ? `<div>${ic('shield')}<span class="grow"><b>How ${esc(l.service)} sharing works</b><span>${esc(l.sharing_rules)}</span></span></div>` : ''}
     </div>
-    ${S.me ? btn : `<button class="btn primary block" data-act="auth">Sign in to join</button>`}`);
+    ${S.me ? btn : `<button class="btn primary block" data-act="auth">Sign in to join</button>`}
+    <div class="two"><button class="btn line" data-act="share" data-id="${l.id}">${ic('share')} Share this plan</button><button class="btn line" data-act="copy" data-v="${esc(planUrl(l.id))}">${ic('copy')} Copy link</button></div>`);
 }
 
 async function confirmSheet(id){
@@ -704,7 +709,7 @@ async function confirmSheet(id){
     ${contact}
     ${enough
       ? `<button class="btn primary block" data-act="payWallet" data-id="${l.id}">Confirm & Pay ${naira(l.total_kobo)}</button><p class="muted xs" style="text-align:center">Paid from your wallet (${naira(v.wallet_kobo)})</p>`
-      : `<button class="btn primary block" data-act="payCard" data-id="${l.id}">Confirm & Pay ${naira(l.total_kobo)}</button><p class="muted xs" style="text-align:center">You'll pay securely with Paystack: card, transfer or USSD.</p>`}
+      : `<button class="btn primary block" data-act="payCard" data-id="${l.id}">Confirm & Pay ${naira(l.total_kobo)}</button><p class="muted xs" style="text-align:center">You'll pay securely online: card, bank transfer or USSD.</p>`}
     <p class="muted xs" style="text-align:center">A ${naira(l.buyer_fee_kobo)} transaction fee is added to every purchase. You get a receipt and an order chat with the host.</p>
     <p class="muted xs" style="text-align:center">By joining you agree to use only your own seat and follow the host's note.</p>`);
 }
@@ -1018,14 +1023,83 @@ function codeCooldown(sec){
   };
   tick(); codeTimer = setInterval(tick, 1000);
 }
-function fundSheet(preKobo){
+async function fundSheet(preKobo){
   if (needAuth()) return;
-  const s = settings();
+  const s = settings(), manual = !!s.manual_funding;
+  let open = [];
+  if (manual){ try { open = ((await API.rpc('my_manual_deposits')).items || []).filter(x => x.status === 'PENDING' || x.status === 'SENT'); } catch(e){ /* ignore */ } }
   openSheet('Add money', `<form class="form" id="f-fund" novalidate>
+    ${open.length ? `<div class="tip warn">You have a bank transfer waiting: ${open.map(x => `<button type="button" class="chip" data-act="mdOpen" data-id="${x.id}">${naira(x.amount_kobo)} · ${x.status === 'SENT' ? 'checking' : 'not sent yet'}</button>`).join(' ')}</div>` : ''}
     <div class="field"><label for="f-amt">Amount (₦)</label><input id="f-amt" inputmode="numeric" value="${preKobo ? Math.ceil(preKobo / 100) : 5000}"><small>Between ${naira(s.min_topup_kobo)} and ${naira(s.max_topup_kobo)}. No fee on deposits.</small></div>
     <div class="chips">${[1000, 2000, 5000, 10000, 20000].map(a => `<button type="button" class="chip" data-act="famt" data-v="${a}">${naira(a * 100)}</button>`).join('')}</div>
-    <p class="tip">You'll pay securely on Paystack with card, bank transfer or USSD, then come back here.</p>
-    <button class="btn primary block" type="submit">Continue to Paystack</button></form>`);
+    <p class="tip">Pay online with your card, bank transfer or USSD. Your money is added to your wallet as soon as the payment is confirmed.</p>
+    <button class="btn primary block" type="submit">Continue to payment</button>
+    ${manual ? `<p class="muted xs" style="text-align:center">Prefer to send the money yourself?</p><button class="btn line block" type="button" data-act="mdStart">${ic('wallet')} Pay by bank transfer instead</button>` : ''}</form>`);
+}
+
+/* ---- Manual bank transfer ---- */
+let MT = null;
+const acctRow = (label, val, copy) => `<div><span>${label}</span><b>${esc(val)}</b>${copy ? `<button type="button" class="chip" data-act="copy" data-v="${esc(val)}">${ic('copy')} Copy</button>` : ''}</div>`;
+function mdBank(d){
+  return `<div class="kv">${acctRow('Bank', d.bank_name)}${acctRow('Account number', d.account_number, true)}${acctRow('Account name', d.account_name)}${acctRow('Amount to send', naira(d.amount_kobo))}${acctRow('Reference', d.reference, true)}</div>`;
+}
+function mdShow(d){
+  clearInterval(MT);
+  if (d.status === 'APPROVED'){ resultSheet(true, 'Money added', `${naira(d.credited_kobo || d.amount_kobo)} was added to your wallet.`); return; }
+  if (d.status === 'REJECTED'){ resultSheet(false, 'Transfer not confirmed', esc(d.note || 'We could not find this transfer.') + ' If you did send it, message support.'); return; }
+  if (d.status === 'CANCELLED'){ closeSheet(); return; }
+  if (d.status === 'PENDING'){
+    openSheet(`Send ${naira(d.amount_kobo)}`, `<p class="muted">Open your bank app and send exactly <b>${naira(d.amount_kobo)}</b> to this account. Then tap the button below.</p>
+      ${mdBank(d)}
+      <p class="tip">Use your own bank account. Put the reference in the narration if your bank allows it. Your wallet is credited after we confirm the money.</p>
+      <button class="btn primary block" data-act="mdSent" data-id="${d.id}">I have sent the money</button>
+      <button class="btn ghost block" data-act="mdCancel" data-id="${d.id}">Cancel this transfer</button>`);
+    return;
+  }
+  // SENT: waiting view with a 4-minute timer before "Notify support" appears
+  openSheet('Checking your transfer', `<div id="md-wait"></div>${mdBank(d)}`);
+  const draw = async () => {
+    const box = $('#md-wait'); if (!box || !box.isConnected){ clearInterval(MT); return; }
+    const left = Math.max(0, Math.ceil((new Date(d.sent_at).getTime() + 4 * 60000 - Date.now() - (d._skew || 0)) / 1000));
+    box.innerHTML = `<p class="muted" style="text-align:center">We got your message. We are checking our bank for <b>${naira(d.amount_kobo)}</b>. This page updates by itself. You can also close it and come back later.</p>
+      ${left > 0 ? `<p class="tip" style="text-align:center">If it is not confirmed in ${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')} you can contact support here.</p>`
+      : `<p class="tip warn">Not confirmed yet? Tell support and upload your receipt.</p><button class="btn primary block" data-act="mdSupport" data-id="${d.id}">${ic('chat')} Notify support</button>`}`;
+  };
+  draw();
+  let n = 0;
+  MT = setInterval(async () => {
+    draw(); if (++n % 5) return;
+    try {
+      const r = await API.rpc('my_manual_deposits'); const x = (r.items || []).find(i => i.id === d.id);
+      if (x && x.status !== 'SENT'){ clearInterval(MT); await loadAll(); render(); mdShow({...d, ...x}); }
+    } catch(e){ /* try again */ }
+  }, 1000);
+}
+async function mdFind(id){
+  const r = await API.rpc('my_manual_deposits'); const x = (r.items || []).find(i => i.id === id);
+  if (!x) throw new Error('Transfer not found.');
+  return {...x, bank_name:r.bank_name, account_number:r.account_number, account_name:r.account_name, _skew:new Date(r.now).getTime() - Date.now()};
+}
+async function mdSupportSheet(id){
+  let d; try { d = await mdFind(id); } catch(e){ toast(e.message); return; }
+  openSheet('Notify support', `<form class="form" id="f-mdsupport" data-id="${d.id}" novalidate>
+    <p class="muted">Tell us about the transfer so we can find it fast.</p>
+    <div class="kv"><div><span>Amount sent</span><b>${naira(d.amount_kobo)}</b></div><div><span>Reference</span><b>${esc(d.reference)}</b></div></div>
+    <div class="field"><label for="md-name">Account name you sent from</label><input id="md-name" value="${esc(S.me.profile.full_name)}" autocomplete="name"></div>
+    <div class="field"><label for="md-file">Receipt</label><input id="md-file" type="file" accept="image/jpeg,image/png,image/webp,application/pdf"><small>A screenshot or PDF of your transfer receipt. Max 5 MB.</small></div>
+    <div class="field"><label for="md-note">Anything else? (optional)</label><textarea id="md-note" maxlength="500"></textarea></div>
+    <button class="btn primary block" type="submit">Send to support</button></form>`);
+}
+function planUrl(id){ return location.origin + location.pathname + '?plan=' + id; }
+function partnerSheet(){
+  const p = S.me ? S.me.profile : {};
+  openSheet('Collaborate or invest', `<form class="form" id="f-partner" novalidate>
+    <p class="muted">Want to work with ${esc(settings().site_name)}, partner with us or invest? Send us a message. A real person reads every one.</p>
+    <div class="field"><label for="pt-kind">I want to</label><select id="pt-kind"><option value="COLLABORATE">Collaborate or partner</option><option value="INVEST">Invest</option><option value="OTHER">Something else</option></select></div>
+    <div class="field"><label for="pt-name">Your name</label><input id="pt-name" value="${esc(p.full_name || '')}" autocomplete="name"></div>
+    <div class="field"><label for="pt-contact">Email or phone number</label><input id="pt-contact" value="${esc(p.email || '')}" autocomplete="email"><small>So we can reply to you.</small></div>
+    <div class="field"><label for="pt-msg">Your message</label><textarea id="pt-msg" maxlength="2000" placeholder="Tell us who you are and what you have in mind."></textarea></div>
+    <button class="btn primary block" type="submit">Send message</button></form>`);
 }
 function withdrawSheet(){
   if (needAuth()) return;
@@ -1123,12 +1197,13 @@ async function copyText(t){
   catch(e){ const el = $('#secret'); if (el){ const r = document.createRange(); r.selectNodeContents(el); const s = getSelection(); s.removeAllRanges(); s.addRange(r); } toast('Press and hold to copy.'); }
 }
 async function shareLink(id){
-  const url = location.origin + location.pathname + '?plan=' + id;
-  if (navigator.share){ try { await navigator.share({title:settings().site_name, text:'Join my plan on ' + settings().site_name, url}); return; } catch(e){ if (e.name === 'AbortError') return; } }
+  const url = planUrl(id), l = S.listings.find(x => x.id === id);
+  const text = l ? `${l.service} ${l.plan} on ${settings().site_name}: ${naira(l.seat_kobo)} per seat. Join here:` : 'Join this plan on ' + settings().site_name;
+  if (navigator.share){ try { await navigator.share({title:settings().site_name, text, url}); return; } catch(e){ if (e.name === 'AbortError') return; } }
   copyText(url);
 }
-async function startPaystack(btn, body){
-  const old = btn.innerHTML; btn.disabled = true; btn.textContent = 'Opening Paystack…';
+async function startPay(btn, body){
+  const old = btn.innerHTML; btn.disabled = true; btn.textContent = 'Opening secure payment…';
   try { const r = await API.fn('payments-init', body); location.href = r.authorization_url; }
   catch(e){ toast(e.message); btn.disabled = false; btn.innerHTML = old; }
 }
@@ -1154,7 +1229,7 @@ document.addEventListener('click', async e => {
       const r = await run(el, () => API.rpc('join_with_wallet', {p_listing:id, p_contact:c ? c.value.trim() : ''}));
       if (r){ const l = S.listings.find(x => x.id === id) || {}; await accessSheet(id); toast(`You joined ${l.service || 'the plan'}!`); }
       break; }
-    case 'payCard': { const c = $('#j-contact'); startPaystack(el, {purpose:'SEAT', listing_id:id, contact:c ? c.value.trim() : ''}); break; }
+    case 'payCard': { const c = $('#j-contact'); startPay(el, {purpose:'SEAT', listing_id:id, contact:c ? c.value.trim() : ''}); break; }
     case 'access': accessSheet(id); break;
     case 'renew': {
       const price = +el.dataset.price + FEE();
@@ -1180,6 +1255,21 @@ document.addEventListener('click', async e => {
     case 'password': passwordSheet(); break;
     case 'signout': run(el, async () => { await API.signOut(); UI.tab = 'explore'; }, 'Signed out.'); break;
     case 'fund': fundSheet(0); break;
+    case 'partner': partnerSheet(); break;
+    case 'mdStart': {
+      const k = toKobo(($('#f-amt') || {}).value), st = settings();
+      if (k < st.min_topup_kobo){ toast(`The smallest deposit is ${naira(st.min_topup_kobo)}.`); break; }
+      if (k > st.max_topup_kobo){ toast(`The largest deposit is ${naira(st.max_topup_kobo)}.`); break; }
+      const d = await run(el, () => API.rpc('manual_deposit_start', {p_amount_kobo:k}));
+      if (d && d !== true) mdShow(d);
+      break; }
+    case 'mdOpen': { try { mdShow(await mdFind(id)); } catch(err){ toast(err.message); } break; }
+    case 'mdSent': {
+      if (!await run(el, () => API.rpc('manual_deposit_sent', {p_id:id}))) break;
+      try { mdShow(await mdFind(id)); } catch(err){ toast(err.message); }
+      break; }
+    case 'mdCancel': if (await run(el, () => API.rpc('manual_deposit_cancel', {p_id:id}), 'Transfer cancelled.')) closeSheet(); break;
+    case 'mdSupport': mdSupportSheet(id); break;
     case 'famt': $('#f-amt').value = v; break;
     case 'withdraw': withdrawSheet(); break;
     case 'move': moveSheet(); break;
@@ -1258,11 +1348,31 @@ document.addEventListener('submit', async e => {
       const pw = val('np'); if (pw.length < 8){ toast('Use at least 8 characters.'); break; }
       if (await run(btn, () => API.updatePassword(pw), 'Password changed.')) closeSheet(); break; }
     case 'f-profile': run(btn, () => API.rpc('update_my_profile', {p_full_name:val('p-name'), p_phone:val('p-phone'), p_username:val('p-user').trim().toLowerCase()}), 'Details saved.'); break;
+    case 'f-partner': {
+      const d = {p_kind:val('pt-kind'), p_name:val('pt-name'), p_contact:val('pt-contact'), p_message:val('pt-msg')};
+      if (d.p_name.trim().length < 2){ toast('Enter your name.'); break; }
+      if (d.p_contact.trim().length < 5){ toast('Enter an email or phone number so we can reply.'); break; }
+      if (d.p_message.trim().length < 10){ toast('Write a short message.'); break; }
+      if (await run(btn, () => API.rpc('submit_partner_inquiry', d))) resultSheet(true, 'Message sent', 'Thank you. We will reply to you soon.');
+      break; }
+    case 'f-mdsupport': {
+      const fl = ($('#md-file') || {}).files ? $('#md-file').files[0] : null, id = f.dataset.id;
+      if (val('md-name').trim().length < 2){ toast('Enter the name on the account you sent from.'); break; }
+      if (!fl){ toast('Please upload your receipt.'); break; }
+      if (fl.size > 5 * 1024 * 1024){ toast('The receipt is bigger than 5 MB. Please use a smaller file.'); break; }
+      const ok = await run(btn, async () => {
+        const ext = (fl.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 5) || 'jpg';
+        const path = `${API.user.id}/${id}-${Date.now()}.${ext}`;
+        await API.upload('deposit-receipts', path, fl);
+        await API.rpc('manual_deposit_support', {p_id:id, p_sender_name:val('md-name'), p_receipt_path:path, p_note:val('md-note')});
+      });
+      if (ok) resultSheet(true, 'Support notified', 'We have your receipt and will check your transfer as fast as we can. You will get a notification when your wallet is credited.');
+      break; }
     case 'f-fund': {
       const k = toKobo(val('f-amt')), st = settings();
       if (k < st.min_topup_kobo){ toast(`The smallest deposit is ${naira(st.min_topup_kobo)}.`); break; }
       if (k > st.max_topup_kobo){ toast(`The largest deposit is ${naira(st.max_topup_kobo)}.`); break; }
-      startPaystack(btn, {purpose:'TOPUP', amount_kobo:k}); break; }
+      startPay(btn, {purpose:'TOPUP', amount_kobo:k}); break; }
     case 'f-withdraw': {
       const d = {p_amount_kobo:toKobo(val('w-amt')), p_bank:val('w-bank'), p_account_number:val('w-acct').replace(/\D/g, ''), p_account_name:val('w-name')};
       if (d.p_amount_kobo < settings().min_withdrawal_kobo){ toast(`The smallest withdrawal is ${naira(settings().min_withdrawal_kobo)}.`); break; }
@@ -1322,12 +1432,12 @@ document.addEventListener('submit', async e => {
   }
 });
 
-/* After Paystack sends the customer back: ?reference=... -> ask the server to verify. */
+/* After the payment page sends the customer back (?tx_ref=...&status=...), ask the server to verify. */
 async function handlePaymentReturn(){
-  const q = new URLSearchParams(location.search), ref = q.get('reference') || q.get('trxref');
+  const q = new URLSearchParams(location.search), ref = q.get('reference') || q.get('trxref') || q.get('tx_ref');
   if (!ref) return;
   history.replaceState(null, '', location.pathname);
-  openSheet('Confirming payment', `<p class="muted" style="text-align:center">Checking with Paystack. Please wait…</p>`);
+  openSheet('Confirming payment', `<p class="muted" style="text-align:center">Confirming your payment. Please wait…</p>`);
   let r;
   try { r = await API.fn('payments-verify', {reference:ref}); } catch(e){ r = {status:'ERROR', message:e.message}; }
   await loadAll(); render();
@@ -1335,6 +1445,8 @@ async function handlePaymentReturn(){
     if (r.purpose === 'SEAT' && r.joined){ UI.tab = 'mysubs'; UI.subs = 'active'; render(); resultSheet(true, "You're in!", `Payment of ${naira(r.amount_kobo)} confirmed and your seat is reserved. Your access is in My Subs.`); }
     else if (r.purpose === 'SEAT'){ resultSheet(false, 'Seat not reserved', `${esc(r.message || 'The seat was taken before your payment finished.')} Your ${naira(r.amount_kobo)} is safe in your wallet.`); }
     else { UI.tab = 'wallet'; render(); resultSheet(true, 'Money added', `${naira(r.amount_kobo)} was added to your wallet.`); }
+  } else if (r.status === 'PENDING' && /^(cancel|fail)/i.test(q.get('status') || '')){
+    resultSheet(false, 'Payment cancelled', 'The payment was not completed. No money was taken.');
   } else if (r.status === 'PENDING'){
     resultSheet(true, 'Payment processing', 'Your bank is still confirming the payment. It will show in your wallet automatically once confirmed.');
   } else {
@@ -1355,7 +1467,7 @@ async function handlePaymentReturn(){
   else if (back && back.type === 'recovery') passwordSheet('Set a new password');
   else if (back && back.type === 'signup') toast('Email confirmed. Welcome to SplitSub!');
   await handlePaymentReturn();
-  const plan = new URLSearchParams(location.search).get('plan');
+  const plan = new URLSearchParams(location.search).get('plan') || new URLSearchParams(location.search).get('listing');
   if (plan){ history.replaceState(null, '', location.pathname); UI.tab = 'explore'; render(); detailSheet(plan); }
 })();
 </script>

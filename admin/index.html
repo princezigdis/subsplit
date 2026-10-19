@@ -207,6 +207,8 @@ const MST = {ACTIVE:['good','Active'], DISPUTED:['warn','Disputed'], COMPLETED:[
 const PST = {PENDING:['warn','Pending'], SUCCESS:['good','Success'], FAILED:['bad','Failed'], ABANDONED:['neutral','Cancelled']};
 const WST = {PENDING:['warn','Requested'], APPROVED:['brand','Approved'], PAID:['good','Paid'], REJECTED:['bad','Rejected']};
 const XST = {PENDING:['warn','Pending'], APPROVED:['good','Approved'], REJECTED:['bad','Rejected']};
+const TDST = {PENDING:['neutral','Not sent yet'], SENT:['warn','Check bank'], APPROVED:['good','Approved'], REJECTED:['bad','Rejected'], CANCELLED:['neutral','Cancelled']};
+const IST = {NEW:['warn','New'], READ:['neutral','Read'], REPLIED:['good','Replied'], CLOSED:['neutral','Closed']};
 const RST = {PENDING:['warn','Waiting'], IN_PROGRESS:['brand','In progress'], ADDED:['good','Added'], DECLINED:['bad','Declined']};
 const DST = {OPEN:['warn','Open'], IN_REVIEW:['brand','In review'], RESOLVED:['good','Resolved'], CLOSED:['neutral','Closed']};
 const TST = {OPEN:['warn','Waiting for us'], ANSWERED:['good','Answered'], CLOSED:['neutral','Closed']};
@@ -214,7 +216,7 @@ const pill = (map, k) => P(...(map[k] || ['neutral', k]));
 
 const PAGES = [['dashboard','Dashboard','home'],['desk','Approval desk','check'],['search','Find transaction','search'],['users','Users','users'],['services','Services','grid'],['listings','Listings','list'],
   ['proofs','Proof verification','check'],['memberships','Memberships','seat'],['chats','Order chats','chat'],['payments','Payments','card'],['wallet','Wallet ledger','book'],['credits','Wallet credits','plus'],
-  ['withdrawals','Withdrawals','bank'],['disputes','Disputes','flag'],['support','Support','chat'],['requests','Subscription requests','list'],['promos','Referrals & promos','flag'],['searches','Search history','search'],['audit','Audit logs','log'],['settings','Settings','cog']];
+  ['deposits','Bank transfers','card'],['withdrawals','Withdrawals','bank'],['disputes','Disputes','flag'],['support','Support','chat'],['requests','Subscription requests','list'],['inquiries','Collab & invest messages','chat'],['promos','Referrals & promos','flag'],['searches','Search history','search'],['audit','Audit logs','log'],['settings','Settings','cog']];
 let BADGE = {};
 let ME = null, DASH = null, SETTINGS = null, page = 'dashboard', filter = {}, cache = {};
 try { page = PAGES.some(p => p[0] === sessionStorage.getItem('admin-page')) ? sessionStorage.getItem('admin-page') : 'dashboard'; } catch(e){}
@@ -249,7 +251,7 @@ async function boot(){
 }
 
 /* ---------- shell ---------- */
-function badges(){ return {listings:BADGE.listings, withdrawals:BADGE.withdrawals, disputes:BADGE.disputes, support:BADGE.support, proofs:BADGE.proofs, requests:BADGE.requests, desk:BADGE.desk}; }
+function badges(){ return {listings:BADGE.listings, withdrawals:BADGE.withdrawals, disputes:BADGE.disputes, support:BADGE.support, proofs:BADGE.proofs, requests:BADGE.requests, desk:BADGE.desk, deposits:BADGE.deposits, inquiries:BADGE.inquiries}; }
 function shell(inner){
   const b = badges();
   const navBtn = ([k, l, i]) => `<button class="nav" data-act="go" data-v="${k}" ${page === k ? 'aria-current="page"' : ''}>${ic(i)}<span>${l}</span>${b[k] ? `<span class="badge">${b[k]}</span>` : ''}</button>`;
@@ -307,7 +309,7 @@ const PAGE = {
       <div class="card"><h3>Needs attention</h3>${todo.length ? todo.map(([n, l, p]) => `<button class="btn line block" style="justify-content:space-between" data-act="go" data-v="${p}"><span>${n} ${l}</span><span>→</span></button>`).join('') : '<p class="muted sm">Nothing waiting. All clear.</p>'}</div>
       <div class="card"><h3>Recent admin activity</h3>${d.recent.length ? d.recent.map(a => `<div class="row between sm"><span><b>${esc(a.action.replace(/_/g, ' ').toLowerCase())}</b> · ${esc(a.entity)} <span class="muted">by @${esc(a.admin || '?')}</span></span><span class="muted xs">${fmtDT(a.created_at)}</span></div>`).join('') : '<p class="muted sm">No activity yet.</p>'}</div>
     </div>
-    <p class="tip">Money owed to people (customer wallets + host earnings + money held + withdrawals to pay) must always be in your bank or Paystack balance.</p>`;
+    <p class="tip">Money owed to people (customer wallets + host earnings + money held + withdrawals to pay) must always be in your bank or Flutterwave balance.</p>`;
   },
 
   async users(){
@@ -358,12 +360,12 @@ const PAGE = {
   async payments(){
     const st = filter.status ?? '';
     const list = cache.payments = await API.rpc('admin_payments', {p_status:st});
-    return `<div class="ptitle"><h1>Payments (Paystack)</h1>${csvBtn('payments')}</div>
+    return `<div class="ptitle"><h1>Payments (Flutterwave)</h1>${csvBtn('payments')}</div>
     ${chipsFor('status', [['','All'],['PENDING','Pending'],['SUCCESS','Success'],['FAILED','Failed'],['ABANDONED','Cancelled']], st)}
-    <p class="tip">Every payment is verified with Paystack on the server before money reaches a wallet. A pending payment can be re-checked here.</p>
+    <p class="tip">Every payment is verified with Flutterwave on the server before money reaches a wallet. A pending payment can be re-checked here.</p>
     <div class="rows">${list.length ? list.map(x => `<div>
       <span class="grow"><b>${naira(x.amount_kobo)} · ${x.purpose === 'SEAT' ? 'Seat' : 'Top-up'}</b> <span class="muted sm">@${esc(x.user)}</span><br><span class="muted xs">${esc(x.reference)} · ${fmtDT(x.created_at)}${x.channel ? ' · ' + esc(x.channel) : ''}${x.note ? ' · ' + esc(x.note) : ''}</span></span>
-      ${pill(PST, x.status)}${x.status === 'PENDING' ? `<button class="btn sm soft" data-act="recheck" data-v="${esc(x.reference)}">Check with Paystack</button>` : ''}</div>`).join('') : '<div><span class="muted">No payments.</span></div>'}</div>`;
+      ${pill(PST, x.status)}${x.status === 'PENDING' ? `<button class="btn sm soft" data-act="recheck" data-v="${esc(x.reference)}">Check with Flutterwave</button>` : ''}</div>`).join('') : '<div><span class="muted">No payments.</span></div>'}</div>`;
   },
 
   async wallet(){
@@ -382,7 +384,7 @@ const PAGE = {
     const list = cache.withdrawals = await API.rpc('admin_withdrawals', {p_status:st});
     return `<div class="ptitle"><h1>Withdrawals</h1>${csvBtn('withdrawals')}</div>
     ${chipsFor('status', [['PENDING','Requested'],['APPROVED','Approved'],['PAID','Paid'],['REJECTED','Rejected'],['','All']], st)}
-    <p class="tip">Send the money from your bank app or Paystack Transfers first, then tap “Mark as paid”. Rejecting returns the money to the host's earnings.</p>
+    <p class="tip">Send the money from your bank app or Flutterwave Transfers first, then tap “Mark as paid”. Rejecting returns the money to the host's earnings.</p>
     <div class="grid">${list.length ? list.map(w => `<div class="card">
       <div class="row between"><div><b class="num" style="font-size:20px">Pay ${naira(w.payout_kobo)}</b><p class="muted sm">Requested ${naira(w.amount_kobo)} − fee ${naira(w.fee_kobo)}<br>@${esc(w.user)} · ${esc(w.full_name)} · ${fmtDT(w.created_at)}<br>ID ${esc(w.reference)}</p></div>${pill(WST, w.status)}</div>
       <div class="kv"><div><span>Bank</span><b>${esc(w.bank_name)}</b></div><div><span>Account number</span><b class="num">${esc(w.account_number)} <button class="link" data-act="copy" data-v="${esc(w.account_number)}">copy</button></b></div><div><span>Account name</span><b>${esc(w.account_name)}</b></div></div>
@@ -445,6 +447,14 @@ const PAGE = {
         <label class="check"><input type="checkbox" id="st-maint" ${s.maintenance_mode ? 'checked' : ''}> Pause the website (customers see a message and cannot buy)</label>
         <div class="field"><label for="st-maintmsg">Message customers will see</label><input id="st-maintmsg" maxlength="300" value="${esc(s.maintenance_message || '')}"></div>
         <small>Use this while you fix something. Existing orders and your admin site keep working. Remember to switch it off and tap Save.</small></div>
+      <div class="card form"><h3>Bank transfer funding</h3>
+        <label class="check"><input type="checkbox" id="st-manual" ${s.manual_funding_enabled ? 'checked' : ''}> Let users add money by bank transfer (they still see the online payment option)</label>
+        <div class="field"><label for="st-mbank">Bank name</label><input id="st-mbank" maxlength="60" value="${esc(s.manual_bank_name || '')}"></div>
+        <div class="two"><div class="field"><label for="st-macct">Account number</label><input id="st-macct" inputmode="numeric" value="${esc(s.manual_account_number || '')}"></div>
+        <div class="field"><label for="st-mname">Account name</label><input id="st-mname" maxlength="100" value="${esc(s.manual_account_name || '')}"></div></div>
+        <small>When ON, users enter an amount and see these details. You get an alert when they tap “I have sent the money”. When OFF, they can only pay online. Tap Save settings after changing.</small></div>
+      <div class="card form"><h3>Admin alert email</h3>
+        <div class="field"><label for="st-alert">Send admin alerts to</label><input id="st-alert" type="email" inputmode="email" autocapitalize="none" value="${esc(s.admin_notify_email || '')}" placeholder="support@splitsub.app"><small>Alerts for bank transfers, receipts, new messages and other admin notices go to this address. Emails to customers still come from your normal sender address.</small></div></div>
       <div class="card form"><h3>Support contacts</h3>
         <div class="field"><label for="st-walink">WhatsApp Support Link</label><input id="st-walink" inputmode="url" autocapitalize="none" value="${esc(s.support_whatsapp_link || '')}" placeholder="https://wa.me/2348012345678"><small>Customers tap this to chat with you. Use a wa.me link or a chat.whatsapp.com invite link. Empty = hide the button.</small></div>
         <div class="two"><div class="field"><label for="st-wa">Old WhatsApp number (digits, optional)</label><input id="st-wa" inputmode="tel" value="${esc(s.support_whatsapp)}" placeholder="2348012345678"></div>
@@ -480,7 +490,7 @@ const PAGE = {
     <h3>Pending payments</h3>
     <div class="grid">${d.payments.length ? d.payments.map(x => `<div class="card"><div class="row between"><div><b class="num">${naira(x.amount_kobo)}</b> <span class="muted sm">${x.purpose === 'SEAT' ? 'Seat' : 'Deposit'} · @${esc(x.user)}</span><p class="muted xs">${esc(x.reference)} · ${fmtDT(x.created_at)}</p></div>${pill(PST, x.status)}</div>
       <input id="pn-${esc(x.reference)}" placeholder="Reason (required to reject)">
-      <div class="wrap-row"><button class="btn sm primary" data-act="recheck" data-v="${esc(x.reference)}">Approve: check with Paystack</button><button class="btn sm danger" data-act="preject" data-v="${esc(x.reference)}" data-confirm="Tap again to reject">Reject</button><button class="btn sm line" data-act="findtx" data-v="${esc(x.reference)}">Details</button></div></div>`).join('') : '<div class="empty">No pending payments.</div>'}</div>
+      <div class="wrap-row"><button class="btn sm primary" data-act="recheck" data-v="${esc(x.reference)}">Approve: check with Flutterwave</button><button class="btn sm danger" data-act="preject" data-v="${esc(x.reference)}" data-confirm="Tap again to reject">Reject</button><button class="btn sm line" data-act="findtx" data-v="${esc(x.reference)}">Details</button></div></div>`).join('') : '<div class="empty">No pending payments.</div>'}</div>
     <h3>Withdrawals waiting</h3>
     <div class="grid">${d.withdrawals.length ? d.withdrawals.map(w => `<div class="card"><div class="row between"><div><b class="num">Pay ${naira(w.payout_kobo)}</b> <span class="muted sm">@${esc(w.user)}</span><p class="muted xs">Requested ${naira(w.amount_kobo)} − fee ${naira(w.fee_kobo)} · ${esc(w.reference)}</p></div>${pill(WST, w.status)}</div>
       <div class="kv"><div><span>Bank</span><b>${esc(w.bank_name)} · ${esc(w.account_number)}</b></div><div><span>Account name</span><b>${esc(w.account_name)}</b></div></div>
@@ -518,6 +528,24 @@ const PAGE = {
     return `<div class="ptitle"><h1>Order chats</h1><span class="muted">${list.length} orders</span></div>
     <form class="search" id="f-csearch"><input id="cq" placeholder="Order ID or username" value="${esc(filter.cq || '')}" autocapitalize="none"><button class="btn primary">Search</button></form>
     <div class="rows">${list.length ? list.map(o => `<div class="tap" data-act="achat" data-id="${o.id}">${tile(o)}<span class="grow"><b>${esc(o.service)}</b> <span class="muted sm">${esc(o.txn_ref || '')}</span><br><span class="muted xs">@${esc(o.buyer)} ↔ @${esc(o.host)} · ${o.messages} message(s)${o.last_message ? ' · “' + esc(o.last_message) + '”' : ''}</span></span>${pill(MST, o.status)}</div>`).join('') : '<div><span class="muted">No orders match.</span></div>'}</div>`;
+  },
+
+  async deposits(){
+    const st = filter.status ?? 'OPEN';
+    const list = cache.deposits = await API.rpc('admin_manual_deposits', {p_status:st});
+    const on = SETTINGS && SETTINGS.manual_funding_enabled;
+    return `<div class="ptitle"><h1>Bank transfers</h1><span class="muted">${on ? 'Switched ON' : 'Switched OFF'} · change it in Settings</span></div>
+    ${chipsFor('status', [['OPEN','Needs checking'],['APPROVED','Approved'],['REJECTED','Rejected'],['CANCELLED','Cancelled'],['','All']], st)}
+    <p class="tip">When a user says they sent money, check your bank app for the amount, then approve (the wallet is credited at once) or reject with a reason. If the user could not be confirmed after 4 minutes, they can send a receipt and you will see it here.</p>
+    <div class="rows">${list.length ? list.map(d => `<div class="tap" data-act="depsheet" data-id="${d.id}"><span class="grow"><b class="num">${naira(d.amount_kobo)}</b> · @${esc(d.username)}${d.receipt_path ? ' <span class="pill brand">Receipt</span>' : ''}<br><span class="muted xs">${esc(d.reference)} · ${d.sent_at ? 'sent ' + fmtDT(d.sent_at) : 'started ' + fmtDT(d.created_at)}${d.support_at ? ' · support asked ' + fmtDT(d.support_at) : ''}</span></span>${pill(TDST, d.status)}</div>`).join('') : '<div><span class="muted">Nothing here.</span></div>'}</div>`;
+  },
+
+  async inquiries(){
+    const st = filter.status ?? 'NEW';
+    const list = cache.inquiries = await API.rpc('admin_inquiries', {p_status:st});
+    return `<div class="ptitle"><h1>Collaborate & invest messages</h1></div>
+    ${chipsFor('status', [['NEW','New'],['READ','Read'],['REPLIED','Replied'],['CLOSED','Closed'],['','All']], st)}
+    <div class="rows">${list.length ? list.map(i => `<div class="tap" data-act="inqsheet" data-id="${i.id}"><span class="grow"><b>${esc(i.name)}</b> <span class="pill brand">${esc(i.kind.toLowerCase())}</span><br><span class="muted xs">${esc(i.contact)} · ${fmtDT(i.created_at)} · ${esc(i.message.slice(0, 90))}${i.message.length > 90 ? '…' : ''}</span></span>${pill(IST, i.status)}</div>`).join('') : '<div><span class="muted">No messages here.</span></div>'}</div>`;
   },
 
   async requests(){
@@ -627,14 +655,38 @@ async function proofSheet(id){
       <div class="wrap-row"><button class="btn good" data-act="pdecide" data-id="${h.id}" data-v="APPROVE" data-confirm="Tap again to approve">Approve</button><button class="btn danger" data-act="pdecide" data-id="${h.id}" data-v="REJECT" data-confirm="Tap again to reject">Reject</button></div>` : ''}`);
   if (h.file_path) showProof(h.file_path);
 }
-async function showProof(path){
+async function showProof(path, bucket){
   const box = $('#proof-view'); if (!box) return;
   try {
-    const url = await API.signedUrl('host-proofs', path, 600);
+    const url = await API.signedUrl(bucket || 'host-proofs', path, 600);
     const pdf = /\.pdf$/i.test(path);
     box.innerHTML = pdf ? `<iframe src="${esc(url)}" title="Proof"></iframe>` : `<a href="${esc(url)}" target="_blank" rel="noopener"><img src="${esc(url)}" alt="Proof sent by the host"></a>`;
     box.insertAdjacentHTML('beforeend', `<div><a class="btn line" href="${esc(url)}" target="_blank" rel="noopener" style="display:inline-block">Open full size</a></div>`);
   } catch(err){ box.innerHTML = `<p class="tip">Could not load the picture: ${esc(err.message)}</p>`; }
+}
+function depSheet(id){
+  const d = cache.deposits.find(x => x.id === id); if (!d) return;
+  const open = d.status === 'PENDING' || d.status === 'SENT';
+  openSheet(`${naira(d.amount_kobo)} · @${esc(d.username)}`, `
+    <div class="kv"><div><span>User</span><b>${esc(d.full_name || '')} · @${esc(d.username)}</b></div><div><span>Contact</span><b>${esc(d.email)} · ${esc(d.phone || '—')}</b></div>
+      <div><span>Amount they say they sent</span><b class="num">${naira(d.amount_kobo)}</b></div><div><span>Reference</span><b>${esc(d.reference)}</b></div>
+      <div><span>Started</span><b>${fmtDT(d.created_at)}</b></div><div><span>Tapped “sent”</span><b>${d.sent_at ? fmtDT(d.sent_at) : '—'}</b></div>
+      ${d.support_at ? `<div><span>Asked support</span><b>${fmtDT(d.support_at)}</b></div><div><span>Sent from account name</span><b>${esc(d.sender_name)}</b></div>` : ''}
+      <div><span>Status</span><b>${esc(d.status.toLowerCase())}</b></div>${d.credited_kobo != null ? `<div><span>Credited</span><b class="num">${naira(d.credited_kobo)}</b></div>` : ''}</div>
+    ${d.user_note ? `<p class="secret">User says: ${esc(d.user_note)}</p>` : ''}${d.admin_note ? `<p class="tip">Your note: ${esc(d.admin_note)}</p>` : ''}
+    ${d.receipt_path ? `<div class="proof-view" id="proof-view"><small>Loading receipt…</small></div>` : '<p class="tip">No receipt uploaded.</p>'}
+    ${open ? `<div class="field"><label for="dp-amt">Amount to credit (₦). Change it only if they sent a different amount.</label><input id="dp-amt" inputmode="decimal" value="${nairaInput(d.amount_kobo)}"></div>
+      <div class="field"><label for="dp-note">Reason (required if you reject; the user sees it)</label><textarea id="dp-note" maxlength="300"></textarea></div>
+      <div class="wrap-row"><button class="btn good" data-act="depdo" data-id="${d.id}" data-v="APPROVE" data-confirm="Tap again: money received">Approve and credit wallet</button><button class="btn danger" data-act="depdo" data-id="${d.id}" data-v="REJECT" data-confirm="Tap again to reject">Reject</button></div>` : ''}`);
+  if (d.receipt_path) showProof(d.receipt_path, 'deposit-receipts');
+}
+function inqSheet(id){
+  const i = cache.inquiries.find(x => x.id === id); if (!i) return;
+  openSheet(esc(i.name), `<div class="kv"><div><span>Wants to</span><b>${esc(i.kind.toLowerCase())}</b></div><div><span>Reply to</span><b>${esc(i.contact)}</b></div><div><span>Account</span><b>${i.username ? '@' + esc(i.username) : 'Not signed in'}</b></div><div><span>Sent</span><b>${fmtDT(i.created_at)}</b></div><div><span>Status</span><b>${esc(i.status.toLowerCase())}</b></div></div>
+    <p class="secret" style="white-space:pre-wrap">${esc(i.message)}</p>
+    <div class="field"><label for="iq-note">Your private note</label><textarea id="iq-note" maxlength="500">${esc(i.admin_note || '')}</textarea></div>
+    <div class="wrap-row">${['READ','REPLIED','CLOSED','NEW'].filter(x => x !== i.status).map(x => `<button class="btn sm ${x === 'REPLIED' ? 'good' : 'soft'}" data-act="inqdo" data-id="${i.id}" data-v="${x}">Mark as ${x === 'NEW' ? 'new' : x.toLowerCase()}</button>`).join('')}</div>`);
+  if (i.status === 'NEW') API.rpc('admin_inquiry_update', {p_id:i.id, p_status:'READ', p_note:i.admin_note || ''}).catch(() => {});
 }
 function reqSheet(id){
   const r = cache.requests.find(x => x.id === id); if (!r) return;
@@ -835,6 +887,14 @@ document.addEventListener('click', async e => {
     case 'achat': chatSheet(id); break;
     case 'findtx': findTx(v); break;
     case 'proofsheet': proofSheet(id); break;
+    case 'depsheet': depSheet(id); break;
+    case 'inqsheet': inqSheet(id); break;
+    case 'depdo': {
+      const body = {p_id:id, p_action:v, p_note:($('#dp-note') || {}).value || ''};
+      if (v === 'APPROVE') body.p_amount_kobo = toKobo(($('#dp-amt') || {}).value);
+      if (await run(el, () => API.rpc('admin_manual_deposit_action', body), v === 'APPROVE' ? 'Approved. The wallet was credited.' : 'Rejected. The user was told why.')) closeSheet();
+      break; }
+    case 'inqdo': if (await run(el, () => API.rpc('admin_inquiry_update', {p_id:id, p_status:v, p_note:($('#iq-note') || {}).value || ''}), 'Updated.')) closeSheet(); break;
     case 'reqsheet': reqSheet(id); break;
     case 'promo': promoSheet(id); break;
     case 'preject': run(el, () => API.rpc('admin_payment_reject', {p_reference:v, p_note:($('#pn-' + v) || {}).value || ''}), 'Payment rejected.'); break;
@@ -850,7 +910,7 @@ document.addEventListener('click', async e => {
     case 'svc-from-search': { await serviceSheet(); const n = $('#sv-name'); if (n) n.value = v.replace(/\b\w/g, c => c.toUpperCase()); break; }
     case 'proof': try { window.open(await API.signedUrl('host-proofs', v, 600), '_blank', 'noopener'); } catch(err){ toast(err.message); } break;
     case 'review': run(el, () => API.rpc('admin_review_listing', {p_id:id, p_action:v, p_note:$('#rv-note').value}), 'Listing updated.'); break;
-    case 'recheck': run(el, async () => { const r = await API.fn('payments-verify', {reference:v}); toast(r.message || r.status); }, 'Checked with Paystack.'); break;
+    case 'recheck': run(el, async () => { const r = await API.fn('payments-verify', {reference:v}); toast(r.message || r.status); }, 'Checked with Flutterwave.'); break;
     case 'wd': run(el, () => API.rpc('admin_withdrawal_action', {p_id:id, p_action:v, p_note:($('#wn-' + id) || {}).value || ''}), v === 'PAID' ? 'Marked as paid.' : v === 'APPROVE' ? 'Approved.' : 'Rejected. Money returned to the host.'); break;
     case 'dispute': {
       const note = ($('#dn-' + id) || {}).value || '', amt = toKobo(($('#da-' + id) || {}).value || '');
@@ -930,7 +990,8 @@ document.addEventListener('submit', async e => {
     case 'f-settings': run(btn, () => API.rpc('admin_save_settings', {p:{site_name:val('st-name'), hero_title:val('st-title'), hero_text:val('st-text'), notice:val('st-notice'),
       categories:val('st-cats').split(',').map(c => c.trim()).filter(Boolean), support_whatsapp:val('st-wa'), support_whatsapp_link:val('st-walink').trim(), support_email:val('st-email').trim(),
       min_withdrawal_kobo:toKobo(val('st-minw')), min_topup_kobo:toKobo(val('st-mint')), max_topup_kobo:toKobo(val('st-maxt')),
-      renewal_window_days:+val('st-renew'), reminder_days:+val('st-remind'), auto_approve_listings:chk('st-auto'), maintenance_mode:chk('st-maint'), maintenance_message:val('st-maintmsg')}}), 'Settings saved.'); break;
+      renewal_window_days:+val('st-renew'), reminder_days:+val('st-remind'), auto_approve_listings:chk('st-auto'), maintenance_mode:chk('st-maint'), maintenance_message:val('st-maintmsg'),
+      manual_funding_enabled:chk('st-manual'), manual_bank_name:val('st-mbank'), manual_account_number:val('st-macct'), manual_account_name:val('st-mname'), admin_notify_email:val('st-alert').trim()}}), 'Settings saved.'); break;
     case 'f-broadcast': {
       if (!btn.dataset.armed){ btn.dataset.armed = '1'; const o = btn.innerHTML; btn.textContent = btn.dataset.confirm; setTimeout(() => { if (btn.isConnected){ delete btn.dataset.armed; btn.innerHTML = o; } }, 3500); break; }
       run(btn, async () => { const n = await API.rpc('admin_broadcast', {p_title:val('bc-title'), p_body:val('bc-body'), p_username:val('bc-user').trim() || null}); toast(`Sent to ${n} user(s).`); }, 'Notification sent.'); break; }

@@ -4,7 +4,7 @@
      /auth/v1       sign up, sign in, email codes, password reset
      /rest/v1/rpc   database functions (every rule is checked there)
      /storage/v1    host proof uploads (private bucket)
-     /functions/v1  Paystack payment functions
+     /functions/v1  Flutterwave payment functions
    No secrets live here. Only the user's own login session is kept in
    the browser so they stay signed in.
    ===================================================================== */

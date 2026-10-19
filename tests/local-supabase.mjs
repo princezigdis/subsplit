@@ -2,7 +2,7 @@
 // LOCAL TEST SERVER (not for production). Imitates the parts of Supabase
 // the apps use — Auth, /rest/v1/rpc (real Postgres + real roles/RLS),
 // Storage, and Edge Functions (runs the REAL backend/functions/*.ts code) —
-// plus a fake Paystack checkout. Lets us test both apps end to end.
+// plus a fake Flutterwave checkout. Lets us test both apps end to end.
 //   node tests/local-supabase.mjs   (needs a local Postgres, see README)
 // =====================================================================
 import http from 'node:http';
@@ -15,7 +15,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = +(process.env.PORT || 8787), BASE = `http://localhost:${PORT}`;
 const PGHOST = process.env.PGHOST, PGPORT = process.env.PGPORT || '5432', PGDB = process.env.PGDATABASE || 'e2e';
-const SERVICE_KEY = 'service-role-local', PUBLISHABLE = 'publishable-local', PAYSTACK_SECRET = 'sk_test_local';
+const SERVICE_KEY = 'service-role-local', PUBLISHABLE = 'publishable-local', FLW_SECRET = 'FLWSECK_TEST-local', FLW_HASH = 'hash-local';
 
 // ---------- Postgres ----------
 function psql(sql) {
@@ -54,17 +54,17 @@ function whoFromAuth(req) {
 }
 
 // ---------- Edge Functions: load the real code with a Deno shim ----------
-const ENV = { SUPABASE_URL: BASE, SUPABASE_SERVICE_ROLE_KEY: SERVICE_KEY, PAYSTACK_SECRET_KEY: PAYSTACK_SECRET,
-              PAYSTACK_API_BASE: BASE + '/paystack', SITE_URL: BASE + '/' };
+const ENV = { SUPABASE_URL: BASE, SUPABASE_SERVICE_ROLE_KEY: SERVICE_KEY, FLUTTERWAVE_SECRET_KEY: FLW_SECRET, FLUTTERWAVE_WEBHOOK_HASH: FLW_HASH,
+              FLUTTERWAVE_API_BASE: BASE + '/flw/v3', SITE_URL: BASE + '/' };
 const FUNCS = {};
 globalThis.Deno = { env: { get: k => ENV[k] }, serve: h => { FUNCS.__last = h; } };
-for (const name of ['payments-init', 'payments-verify', 'paystack-webhook', 'admin-delete-user']) {
+for (const name of ['payments-init', 'payments-verify', 'flutterwave-webhook', 'admin-delete-user']) {
   await import(pathToFileURL(path.join(ROOT, 'backend/functions', name, 'index.ts')).href);
   FUNCS[name] = FUNCS.__last;
 }
 
 // ---------- fake Paystack ----------
-const PAYSTACK = {};  // reference -> tx
+const FLW = {};  // tx_ref -> tx
 const UNCONFIRMED = new Set(), RESENDS = [];
 const storageFiles = {};
 
@@ -187,36 +187,36 @@ http.createServer(async (req, res) => {
       return send(res, r.status, Buffer.from(await r.arrayBuffer()), { 'Content-Type': r.headers.get('content-type') || 'application/json' });
     }
 
-    // ----- Fake Paystack -----
-    if (p === '/paystack/transaction/initialize') {
-      if (req.headers.authorization !== 'Bearer ' + PAYSTACK_SECRET) return send(res, 401, { status: false, message: 'Invalid key' });
+    // ----- Fake Flutterwave -----
+    if (p === '/flw/v3/payments') {
+      if (req.headers.authorization !== 'Bearer ' + FLW_SECRET) return send(res, 401, { status: 'error', message: 'Invalid key' });
       const b = json();
-      PAYSTACK[b.reference] = { ...b, status: 'pending', id: Math.floor(Math.random() * 1e9) };
-      return send(res, 200, { status: true, data: { authorization_url: `${BASE}/paystack/checkout/${b.reference}`, access_code: 'x', reference: b.reference } });
+      FLW[b.tx_ref] = { ...b, status: 'pending', id: Math.floor(Math.random() * 1e9) };
+      return send(res, 200, { status: 'success', data: { link: `${BASE}/flw/checkout/${b.tx_ref}` } });
     }
-    if ((m = p.match(/^\/paystack\/checkout\/(.+)$/))) {
-      const t = PAYSTACK[m[1]]; if (!t) return send(res, 404, 'Unknown');
-      return send(res, 200, `<!doctype html><meta name="viewport" content="width=device-width"><body style="font:16px system-ui;padding:24px;background:#0BA4DB;color:#fff">
-        <h2>Paystack (TEST)</h2><p>${t.email}</p><p style="font-size:28px"><b>NGN ${(t.amount / 100).toLocaleString()}</b></p>
-        <a id="pay" href="/paystack/pay/${m[1]}?ok=1" style="display:block;background:#fff;color:#0BA4DB;padding:14px;border-radius:8px;text-align:center;font-weight:700;text-decoration:none">Pay</a>
-        <p><a id="cancel" href="/paystack/pay/${m[1]}?ok=0" style="color:#fff">Cancel payment</a></p>`);
+    if ((m = p.match(/^\/flw\/checkout\/(.+)$/))) {
+      const t = FLW[m[1]]; if (!t) return send(res, 404, 'Unknown');
+      return send(res, 200, `<!doctype html><meta name="viewport" content="width=device-width"><body style="font:16px system-ui;padding:24px;background:#f5a623;color:#111">
+        <h2>Flutterwave (TEST)</h2><p>${t.customer.email}</p><p style="font-size:28px"><b>NGN ${t.amount.toLocaleString()}</b></p>
+        <a id="pay" href="/flw/pay/${m[1]}?ok=1" style="display:block;background:#111;color:#fff;padding:14px;border-radius:8px;text-align:center;font-weight:700;text-decoration:none">Pay</a>
+        <p><a id="cancel" href="/flw/pay/${m[1]}?ok=0" style="color:#111">Cancel payment</a></p>`);
     }
-    if ((m = p.match(/^\/paystack\/pay\/(.+)$/))) {
-      const t = PAYSTACK[m[1]]; t.status = url.searchParams.get('ok') === '1' ? 'success' : 'abandoned';
-      const cb = new URL(t.callback_url); cb.searchParams.set('trxref', m[1]); cb.searchParams.set('reference', m[1]);
+    if ((m = p.match(/^\/flw\/pay\/(.+)$/))) {
+      const t = FLW[m[1]]; const ok = url.searchParams.get('ok') === '1'; t.status = ok ? 'successful' : 'cancelled';
+      const cb = new URL(t.redirect_url); cb.searchParams.set('status', ok ? 'successful' : 'cancelled'); cb.searchParams.set('tx_ref', m[1]);
+      if (ok) cb.searchParams.set('transaction_id', String(t.id));
       return send(res, 302, '', { Location: cb.toString() });
     }
-    if ((m = p.match(/^\/paystack\/transaction\/verify\/(.+)$/))) {
-      if (req.headers.authorization !== 'Bearer ' + PAYSTACK_SECRET) return send(res, 401, { status: false });
-      const t = PAYSTACK[decodeURIComponent(m[1])];
-      if (!t) return send(res, 404, { status: false, message: 'Transaction reference not found' });
-      return send(res, 200, { status: true, data: { status: t.status, amount: t.amount, currency: 'NGN', id: t.id, channel: 'card', reference: t.reference, metadata: t.metadata } });
+    if (p === '/flw/v3/transactions/verify_by_reference') {
+      if (req.headers.authorization !== 'Bearer ' + FLW_SECRET) return send(res, 401, { status: 'error' });
+      const t = FLW[url.searchParams.get('tx_ref')];
+      if (!t || t.status === 'pending') return send(res, 404, { status: 'error', message: 'No transaction was found for this id' });
+      return send(res, 200, { status: 'success', data: { status: t.status, amount: t.amount, currency: 'NGN', id: t.id, payment_type: 'card', tx_ref: t.tx_ref, meta: t.meta } });
     }
-    // test helper: fire a correctly signed Paystack webhook at the real webhook function
+    // test helper: fire a Flutterwave webhook at the real webhook function
     if ((m = p.match(/^\/test\/webhook\/(.+)$/))) {
-      const raw = JSON.stringify({ event: 'charge.success', data: { reference: m[1] } });
-      const sig = crypto.createHmac('sha512', url.searchParams.get('bad') ? 'wrong' : PAYSTACK_SECRET).update(raw).digest('hex');
-      const r = await FUNCS['paystack-webhook'](new Request(BASE + '/functions/v1/paystack-webhook', { method: 'POST', headers: { 'x-paystack-signature': sig }, body: raw }));
+      const raw = JSON.stringify({ event: 'charge.completed', data: { tx_ref: m[1], status: 'successful' } });
+      const r = await FUNCS['flutterwave-webhook'](new Request(BASE + '/functions/v1/flutterwave-webhook', { method: 'POST', headers: { 'verif-hash': url.searchParams.get('bad') ? 'wrong' : FLW_HASH }, body: raw }));
       return send(res, r.status, await r.text(), { 'Content-Type': 'text/plain' });
     }
     send(res, 404, { message: 'Not found: ' + p });
