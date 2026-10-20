@@ -457,6 +457,41 @@ await step('admin delete account', async () => {
   check('Admin cannot delete their own account', /own account|Type the username|admin/i.test(r), r);
 });
 
+// ---------- admin adds their own listing with proof: live at once (016) ----------
+await step('admin add listing', async () => {
+  const own = sql(`select username from profiles where email = 'owner@subsplit.ng'`);
+  await admin.click('.side [data-v=listings]'); await admin.waitForSelector('h1:has-text("Listings")');
+  await admin.click('[data-act=addlisting]'); await admin.waitForSelector('#f-alist');
+  check('Add listing form says it goes live under the admin account', (await admin.textContent('#sheet-box')).includes('@' + own));
+  const nf = await admin.evaluate(() => [...document.querySelectorAll('#al-plan option')].find(o => o.textContent.startsWith('Netflix')).value);
+  await admin.selectOption('#al-plan', nf); await admin.selectOption('#al-markup', '20'); await admin.selectOption('#al-seats', '2');
+  const pv = await admin.textContent('#al-preview');
+  check('Preview: ₦9,000 +20% ÷ 4 = ₦2,700 seat, ₦2,430 earned per seat, ₦4,860 for 2', pv.includes('₦2,700') && pv.includes('₦2,430') && pv.includes('₦4,860'), pv);
+  await admin.click('#f-alist [type=submit]');
+  check('Login plan asks for the login details first', /login details/.test(await toast(admin)));
+  await admin.fill('#al-access', 'Email: owner-netflix@splitsub.ng  Password: Adm1nOnly!');
+  await admin.click('#f-alist [type=submit]');
+  check('Proof of the plan is required', /proof/i.test(await toast(admin)));
+  await admin.setInputFiles('#al-proof', { name: 'owner-receipt.png', mimeType: 'image/png', buffer: PNG });
+  await admin.fill('#al-proofnote', 'Renews on the 5th');
+  await admin.click('#f-alist [type=submit]');
+  check('Publishing says it is live', /live now/.test(await toast(admin)));
+  await admin.waitForSelector('[data-act=listing]');
+  const row = sql(`select l.status || '|' || l.proof_status || '|' || l.seats_offered || '|' || l.markup_pct from listings l join profiles p on p.id = l.host_id where p.email = 'owner@subsplit.ng'`);
+  check('Listing is LIVE with approved proof, 2 seats, 20% markup', row === 'LIVE|APPROVED|2|20', row);
+  check('Proof file saved privately in the admin folder', sql(`select count(*) from storage.objects o join profiles p on o.name like p.id || '/%' where p.email = 'owner@subsplit.ng' and o.bucket_id = 'host-proofs'`) === '1');
+  check('Admin Listings opens on Live and shows it', (await admin.textContent('main')).includes('@' + own) && (await admin.getAttribute('[data-act=filter][data-v=LIVE]', 'aria-pressed')) === 'true');
+  await admin.click(`[data-act=listing]:has-text("@${own}")`); await admin.waitForSelector('[data-act=proof]');
+  const det = await admin.textContent('#sheet-box');
+  check('Detail shows approved proof, escrow agreement and private login', det.includes('Approved') && det.includes('accepted the 30-day escrow agreement') && det.includes('Adm1nOnly!'));
+  await admin.click('#sheet-box [data-act=close]');
+  await buyer.goto(B); await buyer.waitForSelector('#feed .card');
+  check('Buyers see it on Explore straight away', (await buyer.textContent('#feed')).includes('@' + own));
+  check('Explore never contains the admin listing password', !(await buyer.content()).includes('Adm1nOnly'));
+  const r = await host.evaluate(async () => { try { await API.rpc('admin_add_listing', {p_listing:'11111111-1111-4111-8111-111111111111', p_plan:'11111111-1111-4111-8111-111111111111', p_markup_pct:20, p_seats:1, p_proof_path:'x'}); return 'ok'; } catch (e) { return e.message; } });
+  check('A normal user cannot use the admin shortcut', /admins only/i.test(r), r);
+});
+
 check('No JavaScript errors in either app', errors.length === 0, errors.slice(0, 5).join(' | '));
 await browser.close();
 for (const r of results) console.log(`${r.ok ? 'PASS' : 'FAIL'}  ${r.name}${r.ok ? '' : '  -> ' + r.detail}`);

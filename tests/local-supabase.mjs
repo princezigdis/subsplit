@@ -211,7 +211,12 @@ http.createServer(async (req, res) => {
       if (req.headers.authorization !== 'Bearer ' + FLW_SECRET) return send(res, 401, { status: 'error' });
       const t = FLW[url.searchParams.get('tx_ref')];
       if (!t || t.status === 'pending') return send(res, 404, { status: 'error', message: 'No transaction was found for this id' });
-      return send(res, 200, { status: 'success', data: { status: t.status, amount: t.amount, currency: 'NGN', id: t.id, payment_type: 'card', tx_ref: t.tx_ref, meta: t.meta } });
+      return send(res, 200, { status: 'success', data: { status: t.status, amount: t.amount, currency: t.currency ?? 'NGN', id: t.id, payment_type: 'card', tx_ref: t.tx_ref, meta: t.meta } });
+    }
+    // test helper: change what the fake Flutterwave reports for a transaction (under-payment, wrong currency, failed...)
+    if ((m = p.match(/^\/test\/flw\/(.+)$/)) && req.method === 'POST') {
+      const t = FLW[m[1]]; if (!t) return send(res, 404, { message: 'unknown transaction' });
+      Object.assign(t, json()); return send(res, 200, { ok: true });
     }
     // test helper: fire a Flutterwave webhook at the real webhook function
     if ((m = p.match(/^\/test\/webhook\/(.+)$/))) {

@@ -340,7 +340,7 @@ const PAGE = {
   async listings(){
     const st = filter.status ?? 'PENDING_REVIEW';
     const list = cache.listings = await API.rpc('admin_listings', {p_status:st});
-    return `<div class="ptitle"><h1>Listings</h1></div>
+    return `<div class="ptitle"><h1>Listings</h1><button class="btn primary" data-act="addlisting">${ic('plus')} Add listing</button></div>
     ${chipsFor('status', [['PENDING_REVIEW','Needs review'],['LIVE','Live'],['PAUSED','Paused'],['REJECTED','Rejected'],['SUSPENDED','Suspended'],['DRAFT','Draft'],['EXPIRED','Expired'],['','All']], st)}
     <div class="rows">${list.length ? list.map(l => `<div class="tap" data-act="listing" data-id="${l.id}">${tile(l)}
       <span class="grow"><b>${esc(l.service)} · ${esc(l.plan)}</b><br><span class="muted xs">@${esc(l.host_username)}${l.host_verified ? ' ✓' : ''} · ${l.markup_pct}% markup · ${l.seats_occupied}/${l.seats_total} seats · ${l.proof_uploaded ? 'proof uploaded' : 'no proof'} · ${fmtD(l.submitted_at || l.created_at)}</span></span>
@@ -834,6 +834,57 @@ async function listingSheet(id){
       <div class="wrap-row">${actions.map(a => `<button class="btn ${label[a][0]}" data-act="review" data-id="${l.id}" data-v="${a}" ${['REJECT','SUSPEND','EXPIRE'].includes(a) ? `data-confirm="Tap again to ${label[a][1].toLowerCase()}"` : ''}>${label[a][1]}</button>`).join('')}</div>` : ''}
     ${l.members.length ? `<h3>Members</h3><div class="rows">${l.members.map(m => `<div><span class="grow">@${esc(m.buyer)}<br><span class="muted xs">${esc(m.contact || '')} · until ${fmtD(m.ends_at)} · ${m.escrow.toLowerCase()}</span></span>${pill(MST, m.status)}</div>`).join('')}</div>` : ''}`);
 }
+/* ---------- admin adds a listing under their own account (proof upload, live at once) ---------- */
+const AL = {plan:null};
+const newId = () => (window.crypto && crypto.randomUUID) ? crypto.randomUUID()
+  : '10000000-1000-4000-8000-100000000000'.replace(/[018]/g, c => (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16));
+function alPlans(){
+  const out = [];
+  (cache.services || []).filter(s => s.active).forEach(s => (s.plans || []).filter(p => p.active).forEach(p => out.push({s, p})));
+  return out;
+}
+async function addListingSheet(){
+  try { cache.services = await API.rpc('admin_services'); } catch(e){ toast(e.message); return; }
+  const plans = alPlans();
+  if (!plans.length){ toast('Switch on a service and a plan in Services first.'); return; }
+  if (!plans.some(x => x.p.id === AL.plan)) AL.plan = plans[0].p.id;
+  const groups = [];
+  plans.forEach(x => { let g = groups.find(g => g.s.id === x.s.id); if (!g) groups.push(g = {s:x.s, items:[]}); g.items.push(x.p); });
+  openSheet('Add a listing', `<form class="form" id="f-alist" novalidate>
+    <p class="tip">It goes live straight away under your account <b>@${esc(ME.username)}</b>, with no review. Members pay into escrow and your share reaches your wallet when each period ends, like any host.</p>
+    <div class="field"><label for="al-plan">Subscription and plan</label><select id="al-plan">${groups.map(g => `<optgroup label="${esc(g.s.name)}">${g.items.map(p =>
+      `<option value="${p.id}" ${p.id === AL.plan ? 'selected' : ''}>${esc(g.s.name)} · ${esc(p.name)} · ${naira(p.normal_price_kobo)}</option>`).join('')}</optgroup>`).join('')}</select></div>
+    <div class="two"><div class="field"><label for="al-markup">Markup</label><select id="al-markup"></select></div>
+      <div class="field"><label for="al-seats">Seats to sell</label><select id="al-seats"></select></div></div>
+    <p class="tip" id="al-preview"></p>
+    <p class="tip" id="al-rules" hidden></p>
+    <div class="field"><label for="al-access" id="al-access-l">Login details for members</label><textarea id="al-access"></textarea><small>Only members who have paid can see this. Never shown on Explore.</small></div>
+    <div class="field"><label for="al-note">Note on the listing (optional)</label><input id="al-note" maxlength="300" placeholder="e.g. Please don't change the PIN"></div>
+    <div class="field"><label for="al-proof">Proof of the plan</label><input id="al-proof" type="file" accept="image/jpeg,image/png,image/webp,application/pdf"><small>A receipt or a screenshot of the subscription page. JPG, PNG, WEBP or PDF, up to 5 MB. Kept private with the listing.</small></div>
+    <div class="field"><label for="al-proofnote">Proof note (optional)</label><input id="al-proofnote" maxlength="500" placeholder="e.g. Renews on the 5th every month"></div>
+    <p class="muted xs">Publishing records that you accept the 30-day escrow agreement for this listing.</p>
+    <button class="btn primary" type="submit">Publish listing</button></form>`);
+  alSync();
+}
+function alSync(keepChoices){
+  const x = alPlans().find(x => x.p.id === ($('#al-plan') || {}).value); if (!x) return;
+  const {s, p} = x; AL.plan = p.id;
+  const mSel = $('#al-markup'), sSel = $('#al-seats');
+  if (!keepChoices){
+    const ms = []; for (let m = p.min_markup_pct; m <= p.max_markup_pct; m += 5) ms.push(m);
+    if (!ms.includes(p.max_markup_pct)) ms.push(p.max_markup_pct);
+    mSel.innerHTML = ms.map(m => `<option value="${m}" ${m === p.max_markup_pct ? 'selected' : ''}>${m}%</option>`).join('');
+    sSel.innerHTML = Array.from({length:p.max_seats}, (_, i) => i + 1).map(n => `<option value="${n}" ${n === p.max_seats ? 'selected' : ''}>${n}</option>`).join('');
+    const login = p.access_type === 'LOGIN';
+    $('#al-access-l').textContent = login ? 'Login details for members' : 'Instructions for members (optional)';
+    $('#al-access').placeholder = login ? 'Email: …\nPassword: …\nUse only the profile with your name.' : 'e.g. I send the invite within 2 hours of payment.';
+    const rules = [s.sharing_rules, p.host_instructions].filter(Boolean).join(' ');
+    $('#al-rules').hidden = !rules; $('#al-rules').textContent = rules ? 'Rules: ' + rules : '';
+  }
+  const markup = +mSel.value, seats = +sSel.value, bps = (SETTINGS && SETTINGS.fee_bps) || 1000;
+  const seat = seatPrice(p.normal_price_kobo, p.max_seats, markup), feeK = Math.round(seat * bps / 10000);
+  $('#al-preview').innerHTML = `Seat price <b>${naira(seat)}</b> · ${ACCESS[p.access_type]} · ${p.duration_days} days. You earn <b>${naira(seat - feeK)}</b> per paid seat after the ${bps / 100}% fee, <b>${naira((seat - feeK) * seats)}</b> if all ${seats} seat${seats === 1 ? '' : 's'} are paid.`;
+}
 function membershipSheet(id){
   const m = cache.memberships.find(x => x.id === id); if (!m) return;
   const held = m.escrow === 'HELD';
@@ -903,6 +954,7 @@ document.addEventListener('click', async e => {
     case 'svc': serviceSheet(id); break;
     case 'plan': planSheet(id, el.dataset.s); break;
     case 'listing': listingSheet(id); break;
+    case 'addlisting': addListingSheet(); break;
     case 'membership': membershipSheet(id); break;
     case 'ticket': ticketSheet(id); break;
     case 'logo-clear': $('#sv-logo').value = ''; $('#sv-prev').textContent = (($('#sv-name') || {}).value || '?').slice(0,1).toUpperCase(); break;
@@ -937,6 +989,7 @@ document.addEventListener('change', e => {
   if (e.target.id === 'pr-file') pickImage(e.target.files[0], 'banners', '#pr-banner', '#pr-prev', '#pr-up-msg');
 });
 document.addEventListener('input', e => { if (['pl-price','pl-seats','pl-min','pl-max'].includes(e.target.id)) planPreview(); });
+document.addEventListener('change', e => { if (e.target.id === 'al-plan') alSync(); if (e.target.id === 'al-markup' || e.target.id === 'al-seats') alSync(true); });
 document.addEventListener('change', e => { if (e.target.id === 'ledger-type'){ filter.type = e.target.value; show('wallet', true); } });
 document.addEventListener('input', e => { if (e.target.closest && e.target.closest('#f-fees')) feeTry(); });
 document.addEventListener('change', e => { if (e.target.closest && e.target.closest('#f-fees')) feeTry(); });
@@ -986,6 +1039,22 @@ document.addEventListener('submit', async e => {
       compare_price_kobo:val('pl-compare') ? toKobo(val('pl-compare')) : null, max_seats:+val('pl-seats'), duration_days:+val('pl-days'), min_markup_pct:+val('pl-min'), max_markup_pct:+val('pl-max'),
       access_type:val('pl-access'), verification_required:chk('pl-ver'), host_proof_required:chk('pl-proof'), active:chk('pl-active'),
       customer_instructions:val('pl-cust'), host_instructions:val('pl-host'), notes:val('pl-notes'), sort:+val('pl-sort') || 0}}), 'Plan saved. Listings now use these rules.'); break;
+    case 'f-alist': {
+      const x = alPlans().find(x => x.p.id === val('al-plan')), file = $('#al-proof') && $('#al-proof').files[0];
+      if (!x){ toast('Pick a subscription and plan.'); break; }
+      if (x.p.access_type === 'LOGIN' && val('al-access').trim().length < 5){ toast('Add the login details members will use. Only paying members can see them.'); break; }
+      if (!file){ toast('Add the proof of the plan (a receipt or a screenshot).'); break; }
+      if (file.size > 5 * 1024 * 1024){ toast('The proof file is bigger than 5 MB. Please use a smaller screenshot.'); break; }
+      if (!/^(image\/(jpeg|png|webp)|application\/pdf)$/.test(file.type)){ toast('Use a JPG, PNG, WEBP or PDF file for the proof.'); break; }
+      const lid = newId(), ext = (file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 5) || 'jpg';
+      const path = `${API.user.id}/${lid}/proof-${Date.now()}.${ext}`;
+      const done = await run(btn, async () => {
+        await API.upload('host-proofs', path, file, false);
+        await API.rpc('admin_add_listing', {p_listing:lid, p_plan:x.p.id, p_markup_pct:+val('al-markup'), p_seats:+val('al-seats'),
+          p_access:val('al-access'), p_note:val('al-note'), p_proof_path:path, p_proof_note:val('al-proofnote')});
+      }, 'Listing added. It is live now.', false);
+      if (done){ filter = {status:'LIVE'}; await show('listings', true); }
+      break; }
     case 'f-treply': run(btn, () => API.rpc('admin_reply_ticket', {p_id:f.dataset.id, p_body:val('tr-body'), p_close:false}), 'Reply sent.'); break;
     case 'f-settings': run(btn, () => API.rpc('admin_save_settings', {p:{site_name:val('st-name'), hero_title:val('st-title'), hero_text:val('st-text'), notice:val('st-notice'),
       categories:val('st-cats').split(',').map(c => c.trim()).filter(Boolean), support_whatsapp:val('st-wa'), support_whatsapp_link:val('st-walink').trim(), support_email:val('st-email').trim(),
