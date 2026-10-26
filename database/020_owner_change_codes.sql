@@ -16,7 +16,7 @@ create table if not exists owner_guard.settings (
   max_wrong int not null default 3,
   lock_minutes int not null default 15
 );
-insert into owner_guard.settings (id, owner_email) values (1, 'adedipupoprince@gmail.com') on conflict (id) do nothing;
+insert into owner_guard.settings (id, owner_email) values (1, 'OWNER_EMAIL_HERE') on conflict (id) do nothing;
 
 create table if not exists owner_guard.codes (
   id bigint generated always as identity primary key,
