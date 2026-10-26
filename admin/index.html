@@ -2,6 +2,9 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://*.supabase.co wss://*.supabase.co; frame-src 'self' blob: https://*.supabase.co; media-src 'self' blob: https:; object-src 'none'; base-uri 'self'; form-action 'self'">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<script>if (window.top !== window.self) { document.documentElement.style.display = "none"; try { window.top.location = window.location.href; } catch (e) {} }</script>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>SplitSub Admin</title>
 <meta name="robots" content="noindex, nofollow">
@@ -401,6 +404,7 @@ const PAGE = {
       <div class="row between"><div><b class="num" style="font-size:20px">Pay ${naira(w.payout_kobo)}</b><p class="muted sm">Requested ${naira(w.amount_kobo)} − fee ${naira(w.fee_kobo)}<br>@${esc(w.user)} · ${esc(w.full_name)} · ${fmtDT(w.created_at)}<br>ID ${esc(w.reference)}</p></div>${pill(WST, w.status)}</div>
       <div class="kv"><div><span>Bank</span><b>${esc(w.bank_name)}</b></div><div><span>Account number</span><b class="num">${esc(w.account_number)} <button class="link" data-act="copy" data-v="${esc(w.account_number)}">copy</button></b></div><div><span>Account name</span><b>${esc(w.account_name)}</b></div></div>
       ${w.admin_note ? `<p class="tip">${esc(w.admin_note)}</p>` : ''}
+      ${(w.status === 'PENDING' || w.status === 'APPROVED') && w.new_bank ? `<p class="tip warn">First payout to this bank account. Check the account name matches this user before you pay.</p>` : ''}
       ${w.status === 'PENDING' || w.status === 'APPROVED' ? `<input placeholder="Note (required to reject)" id="wn-${w.id}">
         <div class="wrap-row">${w.status === 'PENDING' ? `<button class="btn sm soft" data-act="wd" data-id="${w.id}" data-v="APPROVE">Approve</button>` : ''}
         <button class="btn sm primary" data-act="wd" data-id="${w.id}" data-v="PAID" data-confirm="Tap again: I sent the money">Mark as paid</button>
@@ -415,7 +419,7 @@ const PAGE = {
     return `<div class="ptitle"><h1>Disputes & refunds</h1></div>
     ${chipsFor('status', [['OPEN','Open'],['IN_REVIEW','In review'],['RESOLVED','Resolved'],['CLOSED','Closed'],['','All']], st)}
     <div class="grid">${list.length ? list.map(d => `<div class="card">
-      <div class="row between"><div><b>${esc(d.service)} · ${esc(d.plan)}</b><p class="muted sm">${reasons[d.reason] || d.reason} · raised by the <b>${esc((d.raised_by_role || 'BUYER').toLowerCase())}</b> · ${fmtDT(d.created_at)}<br>Order ${esc(d.txn_ref || '')}</p></div>${pill(DST, d.status)}</div>
+      <div class="row between"><div><b>${esc(d.service)} · ${esc(d.plan)}</b><p class="muted sm">${reasons[d.reason] || esc(d.reason)} · raised by the <b>${esc((d.raised_by_role || 'BUYER').toLowerCase())}</b> · ${fmtDT(d.created_at)}<br>Order ${esc(d.txn_ref || '')}</p></div>${pill(DST, d.status)}</div>
       <button class="btn sm soft" data-act="achat" data-id="${d.membership_id}">${ic('chat')} Open order chat</button>
       <div class="kv"><div><span>Member</span><b>@${esc(d.buyer)} · ${esc(d.buyer_email)}</b></div><div><span>Access sent to</span><b>${esc(d.contact || '—')}</b></div>
         <div><span>Host</span><b>@${esc(d.host)} · ${esc(d.host_email)}</b></div><div><span>Paid</span><b class="num">${naira(d.amount_kobo)} (${esc(d.escrow.toLowerCase())})</b></div></div>
