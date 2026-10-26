@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SplitSub</title>
+<meta name="robots" content="noindex">
+<script>
+  // Creator links: splitsub.app/adedipupo  ->  splitsub.app/?ref=ADEDIPUPO (opens sign-up with the code filled in)
+  (function(){
+    var p = location.pathname.replace(/^\/+|\/+$/g, '');
+    if (/^[A-Za-z0-9]{3,12}$/.test(p)) { location.replace('/?ref=' + p.toUpperCase()); }
+  })();
+</script>
+<style>
+  :root{--bg:#F6F5FF;--ink:#17172B;--muted:#5D5D78;--brand:#5B5BD6}
+  @media (prefers-color-scheme:dark){:root{--bg:#0F0F1A;--ink:#ECECF6;--muted:#A0A0BE}}
+  body{margin:0;min-height:100vh;display:grid;place-items:center;background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;padding:24px;text-align:center}
+  a{display:inline-block;margin-top:14px;background:var(--brand);color:#fff;text-decoration:none;padding:12px 22px;border-radius:999px;font-weight:700}
+  p{color:var(--muted)}
+</style>
+</head>
+<body>
+  <div><h1 style="margin:0 0 6px">Page not found</h1><p>This link doesn't go anywhere on SplitSub.</p><a href="/">Go to SplitSub</a></div>
+</body>
+</html>

@@ -55,17 +55,22 @@ function whoFromAuth(req) {
 
 // ---------- Edge Functions: load the real code with a Deno shim ----------
 const ENV = { SUPABASE_URL: BASE, SUPABASE_SERVICE_ROLE_KEY: SERVICE_KEY, FLUTTERWAVE_SECRET_KEY: FLW_SECRET, FLUTTERWAVE_WEBHOOK_HASH: FLW_HASH,
-              FLUTTERWAVE_API_BASE: BASE + '/flw/v3', SITE_URL: BASE + '/' };
+              FLUTTERWAVE_API_BASE: BASE + '/flw/v3', SITE_URL: BASE + '/',
+              // bulk messages: fake providers (see /fake/* below)
+              RESEND_API_KEY: 're_local', RESEND_BASE_URL: BASE + '/fake/resend', EMAIL_FROM: 'SplitSub <hello@splitsub.app>',
+              TERMII_API_KEY: 'tm_local', TERMII_SENDER_ID: 'SplitSub', TERMII_BASE_URL: BASE + '/fake/termii',
+              WHATSAPP_TOKEN: 'wa_local', WHATSAPP_PHONE_NUMBER_ID: '123456', WHATSAPP_TEMPLATE: 'splitsub_update', WHATSAPP_GRAPH_URL: BASE + '/fake/graph',
+              BULK_GAP_MS: '0' };
 const FUNCS = {};
 globalThis.Deno = { env: { get: k => ENV[k] }, serve: h => { FUNCS.__last = h; } };
-for (const name of ['payments-init', 'payments-verify', 'flutterwave-webhook', 'admin-delete-user']) {
+for (const name of ['payments-init', 'payments-verify', 'flutterwave-webhook', 'admin-delete-user', 'bulk-send']) {
   await import(pathToFileURL(path.join(ROOT, 'backend/functions', name, 'index.ts')).href);
   FUNCS[name] = FUNCS.__last;
 }
 
 // ---------- fake Paystack ----------
 const FLW = {};  // tx_ref -> tx
-const UNCONFIRMED = new Set(), RESENDS = [];
+const UNCONFIRMED = new Set(), RESENDS = [], SENT = [];
 const storageFiles = {};
 
 function send(res, status, body, headers = {}) {
@@ -186,6 +191,30 @@ http.createServer(async (req, res) => {
       const r = await FUNCS[m[1]](new Request(BASE + p, { method: req.method, headers: req.headers, body: ['GET', 'HEAD'].includes(req.method) ? undefined : body }));
       return send(res, r.status, Buffer.from(await r.arrayBuffer()), { 'Content-Type': r.headers.get('content-type') || 'application/json' });
     }
+
+    // ----- Fake message providers (Resend, Termii, WhatsApp Cloud API) -----
+    if (p === '/fake/resend/emails' && req.method === 'POST') {
+      if (req.headers.authorization !== 'Bearer re_local') return send(res, 401, { message: 'bad key' });
+      const b = json(); const to = (b.to || [])[0] || '';
+      if (/bounce/.test(to)) return send(res, 422, { message: 'Invalid recipient' });
+      SENT.push({ channel: 'EMAIL', to, subject: b.subject, text: b.text }); return send(res, 200, { id: 'em_' + SENT.length });
+    }
+    if (p === '/fake/termii/api/sms/send' && req.method === 'POST') {
+      const b = json();
+      if (b.api_key !== 'tm_local') return send(res, 401, { message: 'Unauthorized' });
+      if (/0000$/.test(b.to)) return send(res, 400, { message: 'Invalid phone number' });
+      SENT.push({ channel: 'SMS', to: b.to, from: b.from, text: b.sms }); return send(res, 200, { code: 'ok', message_id: 'sms_' + SENT.length });
+    }
+    if (p === '/fake/graph/123456/messages' && req.method === 'POST') {
+      if (req.headers.authorization !== 'Bearer wa_local') return send(res, 401, { error: { message: 'Invalid OAuth access token' } });
+      const b = json();
+      if (/9999$/.test(b.to)) return send(res, 400, { error: { message: 'Recipient phone number not on WhatsApp' } });
+      SENT.push({ channel: 'WHATSAPP', to: b.to, template: b.template && b.template.name, text: b.template ? b.template.components[0].parameters[0].text : b.text.body });
+      return send(res, 200, { messages: [{ id: 'wamid.' + SENT.length }] });
+    }
+    if (p === '/test/sent') return send(res, 200, SENT);
+    // GitHub Pages serves 404.html for unknown paths (creator links like /kemi)
+    if (req.method === 'GET' && /^\/[A-Za-z0-9]{3,12}\/?$/.test(p)) return send(res, 404, fs.readFileSync(path.join(ROOT, 'frontend/404.html')));
 
     // ----- Fake Flutterwave -----
     if (p === '/flw/v3/payments') {

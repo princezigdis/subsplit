@@ -203,6 +203,11 @@ const ic = n => `<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="current
 const LOGO = `<svg viewBox="0 0 40 40" aria-hidden="true"><rect width="40" height="40" rx="12" fill="#5B5BD6"/><path d="M19 10a10 10 0 0 0 0 20z" fill="#fff"/><path d="M22 13a10 10 0 0 1 0 20z" fill="#FFB547"/></svg>`;
 const P = (cls, t) => `<span class="pill ${cls}">${esc(t)}</span>`;
 const LST = {DRAFT:['neutral','Draft'], PENDING_REVIEW:['warn','Needs review'], LIVE:['good','Live'], PAUSED:['neutral','Paused'], REJECTED:['bad','Rejected'], SUSPENDED:['bad','Suspended'], EXPIRED:['neutral','Expired']};
+const BANKS = ['Access Bank','Ecobank','FCMB','Fidelity Bank','First Bank','GTBank','Kuda','Moniepoint','Opay','Palmpay','Polaris Bank','Providus Bank','Stanbic IBTC','Sterling Bank','UBA','Union Bank','Wema Bank','Zenith Bank'];
+const LENS = [[1,'1 month'],[3,'3 months'],[6,'6 months'],[12,'12 months']];
+const MVST = {AWAITING_PAYMENT:['warn','Waiting for member to pay'], DONE:['good','Moved'], CANCELLED:['neutral','Cancelled'], DECLINED:['neutral','Member declined']};
+const CPST = {DUE:['warn','To pay'], PAID:['good','Paid'], CANCELLED:['neutral','Cancelled']};
+const BJST = {QUEUED:['neutral','Queued'], SENDING:['brand','Sending'], DONE:['good','Done'], CANCELLED:['neutral','Cancelled']};
 const MST = {ACTIVE:['good','Active'], DISPUTED:['warn','Disputed'], COMPLETED:['neutral','Completed'], REFUNDED:['bad','Refunded'], PARTIALLY_REFUNDED:['neutral','Part refunded']};
 const PST = {PENDING:['warn','Pending'], SUCCESS:['good','Success'], FAILED:['bad','Failed'], ABANDONED:['neutral','Cancelled']};
 const WST = {PENDING:['warn','Requested'], APPROVED:['brand','Approved'], PAID:['good','Paid'], REJECTED:['bad','Rejected']};
@@ -216,7 +221,7 @@ const pill = (map, k) => P(...(map[k] || ['neutral', k]));
 
 const PAGES = [['dashboard','Dashboard','home'],['desk','Approval desk','check'],['search','Find transaction','search'],['users','Users','users'],['services','Services','grid'],['listings','Listings','list'],
   ['proofs','Proof verification','check'],['memberships','Memberships','seat'],['chats','Order chats','chat'],['payments','Payments','card'],['wallet','Wallet ledger','book'],['credits','Wallet credits','plus'],
-  ['deposits','Bank transfers','card'],['withdrawals','Withdrawals','bank'],['disputes','Disputes','flag'],['support','Support','chat'],['requests','Subscription requests','list'],['inquiries','Collab & invest messages','chat'],['promos','Referrals & promos','flag'],['searches','Search history','search'],['audit','Audit logs','log'],['settings','Settings','cog']];
+  ['deposits','Bank transfers','card'],['withdrawals','Withdrawals','bank'],['disputes','Disputes','flag'],['support','Support','chat'],['requests','Subscription requests','list'],['inquiries','Collab & invest messages','chat'],['promos','Referrals & promos','flag'],['creators','Creators & partners','users'],['messages','Bulk messages','chat'],['searches','Search history','search'],['audit','Audit logs','log'],['settings','Settings','cog']];
 let BADGE = {};
 let ME = null, DASH = null, SETTINGS = null, page = 'dashboard', filter = {}, cache = {};
 try { page = PAGES.some(p => p[0] === sessionStorage.getItem('admin-page')) ? sessionStorage.getItem('admin-page') : 'dashboard'; } catch(e){}
@@ -299,7 +304,11 @@ const PAGE = {
     const s = (label, v, alert) => `<div class="stat ${alert ? 'alert' : ''}"><span>${label}</span><b class="num">${v}</b></div>`;
     const todo = [[d.pending_reviews, 'listing(s) to review', 'listings'], [d.open_disputes, 'open dispute(s)', 'disputes'], [d.withdrawals_due, 'withdrawal(s) to pay', 'withdrawals'],
       [d.open_tickets, 'support message(s) waiting', 'support'], [d.pending_payments, 'payment(s) stuck in pending', 'payments']].filter(x => x[0]);
+    const card = SETTINGS && SETTINGS.card_payments_enabled !== false, manual = SETTINGS && SETTINGS.manual_funding_enabled;
     return `<div class="ptitle"><h1>Dashboard</h1>${d.ledger_ok ? P('good', 'Ledger balanced') : `<button class="btn danger sm" data-act="go" data-v="wallet">Ledger mismatch: check now</button>`}</div>
+    <div class="card"><div class="row between"><div><h3>Card payments (Flutterwave)</h3><p class="muted sm">${card ? 'ON: customers can pay with card, bank transfer or USSD through Flutterwave.' : `OFF: the Flutterwave option is hidden in the app${manual ? '. Customers can still add money by bank transfer.' : ' and bank transfer is also off, so nobody can add money right now.'}`}</p></div>
+      ${card ? P('good', 'ON') : P('bad', 'OFF')}</div>
+      <button class="btn ${card ? 'danger' : 'primary'}" data-act="cardpay" data-v="${card ? '0' : '1'}" data-confirm="${card ? 'Tap again to switch OFF' : 'Tap again to switch ON'}">${card ? 'Switch card payments OFF' : 'Switch card payments ON'}</button></div>
     <div class="stats">
       ${s('Users', d.users)}${s('Hosts', d.hosts)}${s('Live listings', d.live_listings)}${s('Active seats', d.active_memberships)}
       ${s('Payments today', naira(d.payments_today_kobo))}${s('Money held for hosts', naira(d.escrow_kobo))}${s('Platform fees earned', naira(d.fees_kobo))}
@@ -331,7 +340,7 @@ const PAGE = {
       ${s.sharing_rules ? `<p class="sm muted">${esc(s.sharing_rules)}</p>` : ''}
       ${s.notes ? `<p class="tip">${esc(s.notes)}</p>` : ''}
       <div class="rows" style="box-shadow:none;border:1px solid var(--line)">${s.plans.map(p => `<div class="tap" data-act="plan" data-id="${p.id}" data-s="${s.id}">
-        <span class="grow"><b>${esc(p.name)}</b> ${p.active ? '' : P('neutral', 'Off')}<br><span class="muted xs">${naira(p.normal_price_kobo)} · ${p.max_seats} seats · ${ACCESS[p.access_type]} · ${p.duration_days} days · markup ${p.min_markup_pct}–${p.max_markup_pct}% · ${p.listings} listing(s)</span></span>
+        <span class="grow"><b>${esc(p.name)}</b> ${p.active ? '' : P('neutral', 'Off')}<br><span class="muted xs">${naira(p.normal_price_kobo)} · ${p.max_seats} seats · ${ACCESS[p.access_type]} · ${p.duration_days} days · sold for ${(p.allowed_months || [1]).join(', ')} month(s) · markup ${p.min_markup_pct}–${p.max_markup_pct}% · ${p.listings} listing(s)</span></span>
         <span class="amt num">${naira(p.example_seat_kobo)}<br><span class="muted xs">max seat price</span></span></div>`).join('') || '<div><span class="muted sm">No plans yet.</span></div>'}</div>
       <div class="wrap-row"><button class="btn sm soft" data-act="svc" data-id="${s.id}">Edit service</button><button class="btn sm line" data-act="plan" data-s="${s.id}">${ic('plus')} Add plan</button></div>
     </div>`).join('')}</div>`;
@@ -349,11 +358,14 @@ const PAGE = {
 
   async memberships(){
     const st = filter.status ?? 'ACTIVE';
-    const list = cache.memberships = await API.rpc('admin_memberships', {p_status:st});
+    const [list, moves] = await Promise.all([API.rpc('admin_memberships', {p_status:st}), API.rpc('admin_seat_moves', {p_status:'AWAITING_PAYMENT'})]);
+    cache.memberships = list;
     return `<div class="ptitle"><h1>Memberships</h1>${csvBtn('memberships')}</div>
+    <p class="tip">Tap a seat to refund it, release it, or <b>move the member to another plan or host</b>.</p>
+    ${moves.length ? `<h3>Moves waiting for the member to pay</h3><div class="rows">${moves.map(x => `<div><span class="grow"><b>@${esc(x.buyer)}</b> · ${esc(x.from)} → ${esc(x.to)}<br><span class="muted xs">Difference about ${naira(x.difference_kobo)} · asked ${fmtDT(x.created_at)}${x.note ? ' · ' + esc(x.note) : ''}</span></span>${pill(MVST, x.status)}<button class="btn sm line" data-act="mvcancel" data-id="${x.id}" data-confirm="Tap again to cancel">Cancel</button></div>`).join('')}</div>` : ''}
     ${chipsFor('status', [['ACTIVE','Active'],['DISPUTED','Disputed'],['COMPLETED','Completed'],['REFUNDED','Refunded'],['PARTIALLY_REFUNDED','Part refunded'],['','All']], st)}
     <div class="rows">${list.length ? list.map(m => `<div class="tap" data-act="membership" data-id="${m.id}">
-      <span class="grow"><b>${esc(m.service)} · ${esc(m.plan)}</b><br><span class="muted xs">${esc(m.txn_ref || '')} · @${esc(m.buyer)} → host @${esc(m.host)} · ${fmtD(m.starts_at)} – ${fmtD(m.ends_at)} · money ${m.escrow.toLowerCase()}${m.escrow === 'HELD' ? ' until ' + fmtD(m.release_at) : ''}</span></span>
+      <span class="grow"><b>${esc(m.service)} · ${esc(m.plan)}</b>${m.periods > 1 ? ` <span class="pill brand">month ${m.period_no}/${m.periods}</span>` : ''}${m.auto_renew && !m.renewed ? ' <span class="pill good">auto-renew</span>' : ''}${m.pending_move ? ' <span class="pill warn">move waiting</span>' : ''}<br><span class="muted xs">${esc(m.txn_ref || '')} · @${esc(m.buyer)} → host @${esc(m.host)} · ${fmtD(m.starts_at)} – ${fmtD(m.ends_at)} · money ${m.escrow.toLowerCase()}${m.escrow === 'HELD' ? ' until ' + fmtD(m.release_at) : ''}</span></span>
       ${pill(MST, m.status)}<span class="amt num">${naira(m.amount_kobo)}</span></div>`).join('') : '<div><span class="muted">Nothing here.</span></div>'}</div>`;
   },
 
@@ -447,6 +459,9 @@ const PAGE = {
         <label class="check"><input type="checkbox" id="st-maint" ${s.maintenance_mode ? 'checked' : ''}> Pause the website (customers see a message and cannot buy)</label>
         <div class="field"><label for="st-maintmsg">Message customers will see</label><input id="st-maintmsg" maxlength="300" value="${esc(s.maintenance_message || '')}"></div>
         <small>Use this while you fix something. Existing orders and your admin site keep working. Remember to switch it off and tap Save.</small></div>
+      <div class="card form"><h3>Card payments (Flutterwave)</h3>
+        <label class="check"><input type="checkbox" id="st-card" ${s.card_payments_enabled !== false ? 'checked' : ''}> Show the Flutterwave option (card, bank transfer, USSD) in the app</label>
+        <small>When OFF, customers can't start new Flutterwave payments; the server refuses them too. Payments already started still finish safely. Keep bank transfer funding ON so people can still add money.</small></div>
       <div class="card form"><h3>Bank transfer funding</h3>
         <label class="check"><input type="checkbox" id="st-manual" ${s.manual_funding_enabled ? 'checked' : ''}> Let users add money by bank transfer (they still see the online payment option)</label>
         <div class="field"><label for="st-mbank">Bank name</label><input id="st-mbank" maxlength="60" value="${esc(s.manual_bank_name || '')}"></div>
@@ -465,7 +480,9 @@ const PAGE = {
         <div class="field"><label for="st-mint">Smallest top-up (₦)</label><input id="st-mint" inputmode="decimal" value="${nairaInput(s.min_topup_kobo)}"></div>
         <div class="field"><label for="st-maxt">Largest top-up (₦)</label><input id="st-maxt" inputmode="decimal" value="${nairaInput(s.max_topup_kobo)}"></div>
         <div class="field"><label for="st-renew">Renewal window (days before end)</label><input id="st-renew" inputmode="numeric" value="${s.renewal_window_days}"></div>
-        <div class="field"><label for="st-remind">Send “ends soon” reminder (days before)</label><input id="st-remind" inputmode="numeric" value="${s.reminder_days}"></div></div>
+        <div class="field"><label for="st-remind">Ask members “Will you renew?” (days before their seat ends)</label><input id="st-remind" inputmode="numeric" value="${s.reminder_days}"></div>
+        <div class="field"><label for="st-hostremind">Ask hosts “Will you renew your plan?” (days before)</label><input id="st-hostremind" inputmode="numeric" value="${s.host_reminder_days ?? 5}"></div>
+        <div class="field"><label for="st-grace">Hold an auto-renew seat after it ends (hours)</label><input id="st-grace" inputmode="numeric" value="${s.auto_renew_grace_hours ?? 24}"><small>Time a member has to top up before the seat opens for someone else.</small></div></div>
         <label class="check"><input type="checkbox" id="st-auto" ${s.auto_approve_listings ? 'checked' : ''}> Auto-approve listings for plans that don't require verification</label></div>
       <button class="btn primary" type="submit">Save settings</button>
     </form>
@@ -598,6 +615,57 @@ const PAGE = {
     ${r.no_results.length ? `<h3>Wanted but not found</h3><div class="rows">${r.no_results.map(x => `<div><span class="grow"><b>${esc(x.term)}</b><br><span class="muted xs">last ${fmtDT(x.last_at)}</span></span><span class="muted">${x.searches}×</span><button class="btn soft" data-act="svc-from-search" data-v="${esc(x.term)}" style="width:auto;padding:6px 12px">Add service</button></div>`).join('')}</div>` : ''}
     <h3>Top searches</h3><div class="rows">${r.top.length ? r.top.map((x, i) => `<div><span class="muted" style="width:26px">${i + 1}</span><span class="grow"><b>${esc(x.term)}</b><br><span class="muted xs">${x.people} ${x.people === 1 ? 'person' : 'people'} · avg ${x.avg_results} result${x.avg_results === 1 ? '' : 's'} · last ${fmtDT(x.last_at)}</span></span><b>${x.searches}</b></div>`).join('') : '<div><span class="muted">No searches yet. They will show here once people use the search box.</span></div>'}</div>`;
   },
+  async creators(){
+    const [list, due] = await Promise.all([API.rpc('admin_creators'), API.rpc('admin_creator_payouts', {p_status:filter.pst ?? 'DUE'})]);
+    cache.creators = list; cache.creatorPayouts = due;
+    const sum = (k) => list.reduce((a, c) => a + (c[k] || 0), 0);
+    const rule = c => c.commission_type === 'PERCENT' ? (c.commission_bps / 100) + '% of each seat' : naira(c.commission_flat_kobo) + ' per order';
+    const site = location.origin.replace(/\/admin.*$/, '');
+    return `<div class="ptitle"><h1>Creators & partners</h1><button class="btn primary" data-act="creator">${ic('plus')} Add creator</button></div>
+    <p class="tip">The creator makes a normal SplitSub account first. Then add them here with their @username and a code. Their link is <b>${esc(site.replace(/^https?:\/\//, ''))}/code</b>. Everyone who signs up with the link or code is theirs, and they see their numbers in their own Account page. Commission becomes payable when the host's 30-day escrow for that seat ends; refunded seats earn nothing.</p>
+    <div class="stats"><div class="stat"><span>Creators</span><b class="num">${list.length}</b></div><div class="stat"><span>Sign-ups from creators</span><b class="num">${sum('signups')}</b></div>
+      <div class="stat"><span>Waiting (escrow)</span><b class="num">${naira(sum('pending_kobo'))}</b></div><div class="stat ${sum('payable_kobo') ? 'alert' : ''}"><span>Ready for payout</span><b class="num">${naira(sum('payable_kobo'))}</b></div>
+      <div class="stat ${sum('due_kobo') ? 'alert' : ''}"><span>Payouts to send</span><b class="num">${naira(sum('due_kobo'))}</b></div><div class="stat"><span>Paid to creators</span><b class="num">${naira(sum('paid_kobo'))}</b></div></div>
+    <div class="rows">${list.length ? list.map(c => `<div class="tap" data-act="creatordetail" data-id="${c.id}"><span class="grow"><b>@${esc(c.username)}</b> · <span class="pill brand">${esc(c.code)}</span> ${c.active ? '' : P('neutral', 'Paused')}<br>
+      <span class="muted xs">${esc(rule(c))}${c.first_purchase_only ? ' (first order only)' : ''} · ${c.signups} sign-up(s) · ${c.buyers} buyer(s) · ${c.bank_name ? esc(c.bank_name) + ' ' + esc(c.account_number) : 'no bank yet'}</span></span>
+      <span class="amt num">${naira(c.total_kobo)}<br><span class="muted xs">pending ${naira(c.pending_kobo)} · ready ${naira(c.payable_kobo)}</span></span></div>`).join('') : '<div><span class="muted">No creators yet. Tap “Add creator”.</span></div>'}</div>
+    <div class="ptitle" style="margin-top:8px"><h2 style="margin:0;font-size:20px">Month-end payouts</h2><button class="btn soft" data-act="preppay" data-confirm="Tap again to prepare">Prepare payouts now</button>${csvBtn('creatorPayouts')}</div>
+    <p class="tip">“Prepare payouts” groups everything that is ready into one payout per creator. Send the money from your bank app, then tap “Mark paid”. Or tap “Pay to wallet” to put it in the creator's SplitSub wallet instead.</p>
+    ${chipsFor('pst', [['DUE','To pay'],['PAID','Paid'],['CANCELLED','Cancelled'],['','All']], filter.pst ?? 'DUE')}
+    <div class="grid">${due.length ? due.map(x => `<div class="card"><div class="row between"><div><b class="num" style="font-size:20px">${naira(x.amount_kobo)}</b><p class="muted sm">@${esc(x.username)} · ${esc(x.code)} · ${esc(x.period_label)} · ${x.items} seat(s)<br>ID ${esc(x.reference)}</p></div>${pill(CPST, x.status)}</div>
+      <div class="kv"><div><span>Bank</span><b>${esc(x.bank_name || '—')}</b></div><div><span>Account number</span><b class="num">${esc(x.account_number || '—')} ${x.account_number ? `<button class="link" data-act="copy" data-v="${esc(x.account_number)}">copy</button>` : ''}</b></div><div><span>Account name</span><b>${esc(x.account_name || '—')}</b></div></div>
+      ${x.status === 'DUE' ? `<div class="wrap-row"><button class="btn sm primary" data-act="cpay" data-id="${x.id}" data-v="PAID" data-confirm="Tap again: I sent the money">Mark paid</button><button class="btn sm soft" data-act="cpay" data-id="${x.id}" data-v="WALLET" data-confirm="Tap again: pay to wallet">Pay to wallet</button><button class="btn sm line" data-act="cpay" data-id="${x.id}" data-v="CANCEL" data-confirm="Tap again to cancel">Cancel</button></div>`
+        : `<p class="muted xs">${x.status === 'PAID' ? (x.method === 'WALLET' ? 'Paid to SplitSub wallet' : 'Paid to bank') + ' · ' + fmtDT(x.paid_at) : 'Cancelled'}</p>`}</div>`).join('') : '<div class="empty">Nothing here.</div>'}</div>`;
+  },
+
+  async messages(){
+    const [jobs, ready] = await Promise.all([API.rpc('admin_bulk_jobs'), API.fn('bulk-send', {check:true}).catch(() => ({}))]);
+    cache.bulkJobs = jobs; cache.bulkReady = ready;
+    const ch = filter.ch || 'EMAIL';
+    const ok = {EMAIL:ready.email, SMS:ready.sms, WHATSAPP:ready.whatsapp}[ch];
+    const setup = {EMAIL:'Email uses your Resend key (already set for SplitSub emails).',
+      SMS:'SMS needs a Termii account: add TERMII_API_KEY, TERMII_SENDER_ID (your approved sender name) and TERMII_BASE_URL in Supabase → Edge Functions → Secrets.',
+      WHATSAPP:'WhatsApp needs the WhatsApp Business API (Meta): add WHATSAPP_TOKEN, WHATSAPP_PHONE_NUMBER_ID and WHATSAPP_TEMPLATE (an approved template with one {{1}} variable) in Supabase → Edge Functions → Secrets.'}[ch];
+    return `<div class="ptitle"><h1>Bulk messages</h1></div>
+    ${chipsFor('ch', [['EMAIL','Email'],['SMS','SMS'],['WHATSAPP','WhatsApp']], ch)}
+    <p class="tip ${ok ? 'good' : 'warn'}">${ok ? `${{EMAIL:'Email', SMS:'SMS', WHATSAPP:'WhatsApp'}[ch]} is connected and ready.${ch === 'SMS' && ready.sms_sender ? ' Sender: ' + esc(ready.sms_sender) + '.' : ''}${ch === 'WHATSAPP' ? (ready.whatsapp_template ? ' Template: ' + esc(ready.whatsapp_template) + '.' : ' No template set, so only people who messaged you in the last 24 hours will get it.') : ''}` : 'Not connected yet. ' + setup}</p>
+    <form class="card form" id="f-bulk" data-ch="${ch}" novalidate>
+      <div class="field"><label for="bk-to">${ch === 'EMAIL' ? 'Email addresses' : 'Phone numbers'} (one per line)</label><textarea id="bk-to" style="min-height:140px" placeholder="${ch === 'EMAIL' ? 'ada@gmail.com\ntobi@yahoo.com' : '08031234567\n+2348051234567'}"></textarea>
+        <small>Paste up to 2,000. Duplicates are removed. ${ch === 'EMAIL' ? '' : 'Nigerian numbers can start with 0, 234 or +234. Other countries need + and the country code.'}</small></div>
+      <div class="wrap-row"><button class="btn sm line" type="button" data-act="bkall" data-v="${ch}">Fill with all my users</button><span class="muted xs" id="bk-count"></span></div>
+      ${ch === 'EMAIL' ? '<div class="field"><label for="bk-subj">Subject</label><input id="bk-subj" maxlength="150" placeholder="e.g. SplitSub is live"></div>' : ''}
+      <div class="field"><label for="bk-msg">Message</label><textarea id="bk-msg" style="min-height:120px" maxlength="${ch === 'SMS' ? 640 : ch === 'WHATSAPP' ? 1000 : 5000}"></textarea><small id="bk-len">${ch === 'SMS' ? 'Up to 640 characters. 160 characters = 1 SMS page.' : ch === 'WHATSAPP' ? 'Up to 1,000 characters. It is put inside your approved template.' : 'Plain text. New lines are kept.'}</small></div>
+      <div id="bk-progress"></div>
+      <button class="btn primary" type="submit" ${ok ? '' : 'disabled'} data-confirm="Tap again to send to everyone">Send ${ch === 'EMAIL' ? 'emails' : ch === 'SMS' ? 'SMS' : 'WhatsApp messages'}</button>
+      <p class="muted xs">Only message people who agreed to hear from SplitSub. Keep this page open while it sends; you can continue later from the list below.</p></form>
+    <h3>Sent messages</h3>
+    <div class="rows">${jobs.length ? jobs.map(j => `<div style="display:grid;gap:6px"><div class="row between"><span><b>${{EMAIL:'Email', SMS:'SMS', WHATSAPP:'WhatsApp'}[j.channel]}</b>${j.subject ? ' · ' + esc(j.subject) : ''} <span class="muted xs">by @${esc(j.by || '?')} · ${fmtDT(j.created_at)}</span></span>${pill(BJST, j.status)}</div>
+      <span class="muted sm">${esc(j.message)}${j.message.length >= 160 ? '…' : ''}</span>
+      <span class="sm"><b>${j.sent}</b> sent · <b>${j.failed}</b> failed · ${j.pending} waiting · ${j.total} total</span>
+      ${(j.errors || []).length ? `<details><summary class="xs">Why some failed</summary><div class="xs muted">${j.errors.map(e => esc(e.to) + ': ' + esc(e.error)).join('<br>')}</div></details>` : ''}
+      ${j.pending > 0 && j.status !== 'CANCELLED' ? `<div class="wrap-row"><button class="btn sm primary" data-act="bkgo" data-id="${j.id}" data-v="${j.channel}">Continue sending</button><button class="btn sm line" data-act="bkcancel" data-id="${j.id}" data-confirm="Tap again to stop">Stop</button></div>` : ''}</div>`).join('') : '<div><span class="muted">Nothing sent yet.</span></div>'}</div>`;
+  },
+
   async audit(){
     const list = await API.rpc('admin_audit_logs');
     const changed = a => { if (!a.old_data || !a.new_data) return ''; const keys = Object.keys(a.new_data).filter(k => JSON.stringify(a.old_data[k]) !== JSON.stringify(a.new_data[k]) && !['updated_at'].includes(k));
@@ -788,7 +856,7 @@ function serviceSheet(id){
 function planSheet(id, sid){
   const svc = cache.services.find(x => x.id === sid) || cache.services.find(x => x.plans.some(p => p.id === id));
   const p = id ? svc.plans.find(x => x.id === id) : {name:'', normal_price_kobo:0, compare_price_kobo:null, max_seats:5, access_type:'FAMILY', duration_days:30, min_markup_pct:10, max_markup_pct:30,
-    verification_required:true, host_proof_required:true, active:true, customer_instructions:'', host_instructions:'', notes:'', sort:svc.plans.length + 1};
+    verification_required:true, host_proof_required:true, active:true, customer_instructions:'', host_instructions:'', notes:'', sort:svc.plans.length + 1, allowed_months:[1,3,6,12]};
   openSheet(`${esc(svc.name)}: ${id ? 'edit plan' : 'add plan'}`, `<form class="form" id="f-plan" data-id="${id || ''}" data-s="${svc.id}" novalidate>
     <div class="field"><label for="pl-name">Plan name</label><input id="pl-name" value="${esc(p.name)}" placeholder="e.g. Premium, Family"></div>
     <div class="two"><div class="field"><label for="pl-price">Normal price (₦ per period)</label><input id="pl-price" inputmode="decimal" value="${nairaInput(p.normal_price_kobo)}"><small>The full price of this plan. Hosts can't change it.</small></div>
@@ -799,6 +867,8 @@ function planSheet(id, sid){
     <div class="field"><label for="pl-max">Maximum markup %</label><input id="pl-max" type="number" inputmode="numeric" min="10" max="30" value="${p.max_markup_pct}"><small>Never above 30%. Same min and max = locked markup.</small></div></div>
     <div class="field"><label for="pl-access">Access method</label><select id="pl-access">${Object.entries(ACCESS).map(([k, l]) => `<option value="${k}" ${p.access_type === k ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
     <p class="tip" id="pl-preview"></p>
+    <div class="field"><span class="lbl2" style="font-weight:700;font-size:14px">Lengths customers can buy</span><div class="wrap-row">${LENS.map(([n, l]) => `<label class="check" style="margin-right:12px"><input type="checkbox" class="pl-len" value="${n}" ${(p.allowed_months || [1,3,6,12]).includes(n) ? 'checked' : ''}> ${l}</label>`).join('')}</div>
+      <small>Each month is one period of this plan (${p.duration_days || 30} days). The host is paid one month at a time.</small></div>
     <label class="check"><input type="checkbox" id="pl-ver" ${p.verification_required ? 'checked' : ''}> Admin must review every listing</label>
     <label class="check"><input type="checkbox" id="pl-proof" ${p.host_proof_required ? 'checked' : ''}> Host must upload proof of the plan</label>
     <label class="check"><input type="checkbox" id="pl-active" ${p.active ? 'checked' : ''}> Plan is on</label>
@@ -827,12 +897,13 @@ async function listingSheet(id){
     <h3>Proof of purchase ${l.proof_status && l.proof_status !== 'NONE' ? pill(XST, l.proof_status) : ''}</h3>
     ${(l.proofs || []).length ? `<div class="rows">${l.proofs.map(h => `<div><span class="grow sm">${fmtDT(h.submitted_at)}${h.reason ? '<br><span class="muted xs">' + esc(h.reason) + '</span>' : ''}</span>${pill(XST, h.status)}<button class="btn sm soft" data-act="proof" data-v="${esc(h.file_path)}">View</button></div>`).join('')}</div>` : '<p class="muted sm">No proof uploaded. The listing cannot go live if this plan requires proof.</p>'}
     <p class="tip ${l.agreement_at ? 'good' : 'warn'}">${l.agreement_at ? 'Host accepted the 30-day escrow agreement on ' + fmtDT(l.agreement_at) + '.' : 'Host has not accepted the 30-day escrow agreement.'}</p>
+    ${l.host_paid_until ? `<p class="tip ${l.host_stopping || l.renew_paused ? 'warn' : ''}">${l.host_stopping ? 'The host said they will NOT renew this plan. No new members can join.' : l.renew_paused ? 'Paused: the host did not confirm that the plan continues.' : 'Host plan confirmed until ' + fmtD(l.host_paid_until) + '.'}</p>` : ''}
     ${l.proof_note ? `<p class="secret">Host says: ${esc(l.proof_note)}</p>` : ''}
     <h3>Access details (private)</h3><p class="secret">${esc(l.access_details) || '—'}</p>
     ${l.note ? `<p class="tip">Listing note: ${esc(l.note)}</p>` : ''}${l.review_note ? `<p class="tip">Last review note: ${esc(l.review_note)}</p>` : ''}
     ${actions.length ? `<div class="field"><label for="rv-note">Note to host (required to reject)</label><textarea id="rv-note"></textarea></div>
       <div class="wrap-row">${actions.map(a => `<button class="btn ${label[a][0]}" data-act="review" data-id="${l.id}" data-v="${a}" ${['REJECT','SUSPEND','EXPIRE'].includes(a) ? `data-confirm="Tap again to ${label[a][1].toLowerCase()}"` : ''}>${label[a][1]}</button>`).join('')}</div>` : ''}
-    ${l.members.length ? `<h3>Members</h3><div class="rows">${l.members.map(m => `<div><span class="grow">@${esc(m.buyer)}<br><span class="muted xs">${esc(m.contact || '')} · until ${fmtD(m.ends_at)} · ${m.escrow.toLowerCase()}</span></span>${pill(MST, m.status)}</div>`).join('')}</div>` : ''}`);
+    ${l.members.length ? `<h3>Members</h3><div class="rows">${l.members.map(m => `<div><span class="grow">@${esc(m.buyer)}${m.periods > 1 ? ` · month ${m.period_no}/${m.periods}` : ''}<br><span class="muted xs">${esc(m.contact || '')} · ${fmtD(m.starts_at)} – ${fmtD(m.ends_at)} · ${m.escrow.toLowerCase()}${m.auto_renew ? ' · auto-renew' : ''}</span></span>${pill(MST, m.status)}</div>`).join('')}</div>` : ''}`);
 }
 /* ---------- admin adds a listing under their own account (proof upload, live at once) ---------- */
 const AL = {plan:null};
@@ -893,11 +964,93 @@ function membershipSheet(id){
       <div><span>Period</span><b>${fmtD(m.starts_at)} – ${fmtD(m.ends_at)}</b></div><div><span>Order ID</span><b>${esc(m.txn_ref || '')} <button class="link" data-act="copy" data-v="${esc(m.txn_ref || '')}">copy</button></b></div><div><span>Seat price</span><b class="num">${naira(m.amount_kobo)}</b></div><div><span>Buyer fee</span><b class="num">${naira(m.buyer_fee_kobo)}</b></div><div><span>Escrow releases</span><b>${fmtD(m.release_at)}</b></div>
       <div><span>Platform fee (10%)</span><b class="num">${naira(m.fee_kobo)}</b></div><div><span>Host share</span><b class="num">${naira(m.host_kobo)}</b></div>
       <div><span>Money</span><b>${esc(m.escrow.toLowerCase())}${m.refund_kobo ? ' · refunded ' + naira(m.refund_kobo) : ''}</b></div></div>
-    <div class="wrap-row"><button class="btn sm soft" data-act="achat" data-id="${m.id}">${ic('chat')} Order chat</button><button class="btn sm line" data-act="findtx" data-v="${esc(m.txn_ref || '')}">Full transaction view</button></div>
+    ${m.periods > 1 ? `<p class="tip">Month ${m.period_no} of ${m.periods} in order ${esc(m.order_ref || '')}. Each month is paid to the host when it ends.</p>` : ''}
+    ${m.moved_to ? '<p class="tip">This seat was moved to another plan.</p>' : ''}
+    <div class="wrap-row"><button class="btn sm soft" data-act="achat" data-id="${m.id}">${ic('chat')} Order chat</button><button class="btn sm line" data-act="findtx" data-v="${esc(m.txn_ref || '')}">Full transaction view</button>
+      ${(m.status === 'ACTIVE') && held && new Date(m.ends_at) > new Date() ? `<button class="btn sm primary" data-act="movesheet" data-id="${m.id}">Move to another plan</button>` : ''}</div>
     ${held ? `<div class="field"><label for="ms-note">Reason (required for refunds)</label><input id="ms-note"></div>
       <div class="row"><input id="ms-amt" inputmode="decimal" placeholder="Partial refund ₦" style="max-width:180px"><button class="btn soft sm" data-act="mrefund" data-id="${m.id}" data-v="part" data-confirm="Tap again to refund part">Partial refund</button></div>
       <div class="wrap-row"><button class="btn danger" data-act="mrefund" data-id="${m.id}" data-v="full" data-confirm="Tap again: full refund">Full refund</button>
       <button class="btn good" data-act="mrelease" data-id="${m.id}" data-confirm="Tap again: pay host now">Release to host now</button></div>` : '<p class="tip">This payment is settled. No more money actions are possible.</p>'}`);
+}
+/* ---------- move a member to another plan or host ---------- */
+let MV = null;
+async function moveSheet(id){
+  const m = cache.memberships.find(x => x.id === id); if (!m) return;
+  let targets; try { targets = await API.rpc('admin_move_targets', {p_membership:id}); } catch(e){ toast(e.message); return; }
+  if (!targets.length){ toast('There is no other live listing to move to yet.'); return; }
+  MV = {m, targets};
+  openSheet(`Move @${esc(m.buyer)}`, `<form class="form" id="f-move" data-id="${id}" novalidate>
+    <p class="muted sm">From <b>${esc(m.service)} · ${esc(m.plan)}</b> (host @${esc(m.host)}). The member keeps the same end date. The unused part of this seat (and any months not started) pays for the new one.</p>
+    <div class="field"><label for="mv-to">Move to</label><select id="mv-to">${targets.map(t => `<option value="${t.id}" ${t.seats_free ? '' : 'disabled'}>${t.same_plan ? '★ ' : ''}${esc(t.service)} · ${esc(t.plan)} · @${esc(t.host)} · ${naira(t.seat_kobo)}/seat · ${t.seats_free ? t.seats_free + ' free' : 'full'}${t.status === 'PAUSED' ? ' · paused' : ''}</option>`).join('')}</select><small>★ = same plan with another host.</small></div>
+    <label class="check"><input type="checkbox" id="mv-payold" checked> Pay the old host for the days already used (untick if the host failed and should get nothing)</label>
+    <label class="check"><input type="checkbox" id="mv-cover"> SplitSub pays the difference if the new plan costs more</label>
+    <div class="field"><label for="mv-contact">Email or phone the new host should use (for invites or data)</label><input id="mv-contact" value="${esc(m.contact || '')}"></div>
+    <div class="field"><label for="mv-note">Note to the member (optional)</label><input id="mv-note" maxlength="300" placeholder="e.g. Your old host stopped the plan"></div>
+    <div class="kv" id="mv-quote"><div><span>Checking…</span><b></b></div></div>
+    <button class="btn primary" type="submit" id="mv-go">Move</button></form>`);
+  moveQuote();
+}
+async function moveQuote(){
+  const box = $('#mv-quote'); if (!box || !MV) return;
+  const to = $('#mv-to').value, payOld = $('#mv-payold').checked, cover = $('#mv-cover').checked;
+  try {
+    const q = await API.rpc('admin_move_quote', {p_membership:MV.m.id, p_target:to, p_pay_old:payOld});
+    const d = q.difference_kobo;
+    box.innerHTML = `<div><span>Unused part credited</span><b class="num">${naira(q.credit_kobo)}</b></div><div><span>New plan, same days (${q.months} period${q.months === 1 ? '' : 's'})</span><b class="num">${naira(q.cost_kobo)}</b></div>
+      <div class="total"><span>${d < 0 ? 'Left over → member\'s wallet' : d === 0 ? 'Difference' : cover ? 'Difference (SplitSub pays)' : 'Member pays the difference'}</span><b class="num">${naira(Math.abs(d))}</b></div>
+      <div><span>Member's wallet now</span><b class="num">${naira(q.wallet_kobo)}</b></div><div><span>New seat ends</span><b>${fmtD(q.ends_at)}</b></div>`;
+    $('#mv-go').textContent = d > 0 && !cover ? `Ask member to pay ${naira(d)}` : 'Move now';
+  } catch(e){ box.innerHTML = `<div><span class="tip bad" style="margin:0">${esc(e.message)}</span><b></b></div>`; }
+}
+/* ---------- creators ---------- */
+function creatorSheet(id){
+  const c = id ? (cache.creators || []).find(x => x.id === id) : {code:'', commission_type:'PERCENT', commission_bps:500, commission_flat_kobo:0, first_purchase_only:false, bank_name:'Moniepoint', account_number:'', account_name:'', notes:'', active:true};
+  if (!c) return;
+  openSheet(id ? `Edit @${esc(c.username)}` : 'Add a creator or partner', `<form class="form" id="f-creator" data-id="${id || ''}" novalidate>
+    ${id ? '' : '<div class="field"><label for="cr-user">Their SplitSub @username</label><input id="cr-user" autocapitalize="none" placeholder="e.g. adedipupo"><small>They must create a normal account first. Find their username in Users.</small></div>'}
+    <div class="field"><label for="cr-code">Promo code</label><input id="cr-code" autocapitalize="characters" maxlength="12" value="${esc(c.code)}" placeholder="e.g. ADEDIPUPO"><small>3 to 12 letters or numbers. Their link becomes ${esc(location.host)}/<span id="cr-slug">${esc((c.code || 'code').toLowerCase())}</span>. ${id ? 'Changing it breaks their old link.' : ''}</small></div>
+    <div class="two"><div class="field"><label for="cr-type">Commission</label><select id="cr-type"><option value="PERCENT" ${c.commission_type === 'PERCENT' ? 'selected' : ''}>Percentage of each seat</option><option value="FLAT" ${c.commission_type === 'FLAT' ? 'selected' : ''}>Flat ₦ per order</option></select></div>
+      <div class="field"><label for="cr-val" id="cr-val-l">${c.commission_type === 'FLAT' ? 'Amount (₦)' : 'Percentage (%)'}</label><input id="cr-val" inputmode="decimal" value="${c.commission_type === 'FLAT' ? nairaInput(c.commission_flat_kobo) : c.commission_bps / 100}"></div></div>
+    <small class="muted">SplitSub keeps 10% of each seat plus ₦200 per order. A percentage above 10% means you pay more than you earn from that seat.</small>
+    <label class="check"><input type="checkbox" id="cr-first" ${c.first_purchase_only ? 'checked' : ''}> Pay only on each person's first order (not on renewals)</label>
+    <h3 style="margin:6px 0 0">Payout bank</h3>
+    <div class="two"><div class="field"><label for="cr-bank">Bank</label><select id="cr-bank">${BANKS.map(b => `<option ${b === c.bank_name ? 'selected' : ''}>${b}</option>`).join('')}</select></div>
+      <div class="field"><label for="cr-acct">Account number</label><input id="cr-acct" inputmode="numeric" maxlength="10" value="${esc(c.account_number)}"></div></div>
+    <div class="field"><label for="cr-name">Account name</label><input id="cr-name" maxlength="100" value="${esc(c.account_name)}"></div>
+    <div class="field"><label for="cr-notes">Private notes</label><input id="cr-notes" maxlength="500" value="${esc(c.notes)}"></div>
+    <label class="check"><input type="checkbox" id="cr-active" ${c.active ? 'checked' : ''}> Active (earning commission)</label>
+    <button class="btn primary" type="submit">${id ? 'Save' : 'Add creator'}</button></form>`);
+}
+async function creatorDetail(id){
+  let c; try { c = await API.rpc('admin_creator_detail', {p_id:id}); } catch(e){ toast(e.message); return; }
+  const link = location.origin.replace(/\/admin.*$/, '') + '/' + c.link_slug;
+  openSheet(`@${esc(c.username)} · ${esc(c.code)}`, `
+    <div class="kv"><div><span>Name</span><b>${esc(c.full_name || '—')}</b></div><div><span>Email · phone</span><b>${esc(c.email)} · ${esc(c.phone || '—')}</b></div>
+      <div><span>Link</span><b>${esc(link.replace(/^https?:\/\//, ''))} <button class="link" data-act="copy" data-v="${esc(link)}">copy</button></b></div>
+      <div><span>Commission</span><b>${c.commission_type === 'PERCENT' ? c.commission_bps / 100 + '% of each seat' : naira(c.commission_flat_kobo) + ' per order'}${c.first_purchase_only ? ' · first order only' : ''}</b></div>
+      <div><span>Bank</span><b>${esc(c.bank_name || '—')} · ${esc(c.account_number || '—')} · ${esc(c.account_name || '')}</b></div>
+      <div><span>Sign-ups · buyers</span><b>${c.signups} · ${c.buyers}</b></div><div><span>Sales from their people</span><b class="num">${naira(c.sales_kobo)}</b></div>
+      <div><span>Pending · ready · paid</span><b class="num">${naira(c.pending_kobo)} · ${naira(c.payable_kobo)} · ${naira(c.paid_kobo)}</b></div></div>
+    <div class="wrap-row"><button class="btn soft sm" data-act="creator" data-id="${c.id}">Edit</button><button class="btn line sm" data-act="userid" data-id="${c.user_id}">Open user</button></div>
+    <h3>People who signed up (${c.people.length})</h3>
+    <div class="rows">${c.people.length ? c.people.map(p => `<div><span class="grow">@${esc(p.username)}<br><span class="muted xs">joined ${fmtD(p.joined_at)} · ${p.orders} order(s)</span></span><span class="amt num">${naira(p.earned_kobo)}</span></div>`).join('') : '<div><span class="muted">Nobody yet.</span></div>'}</div>
+    <h3>Commission lines</h3>
+    <div class="rows">${c.earnings.length ? c.earnings.map(e => `<div><span class="grow">@${esc(e.username)} · ${esc(e.service)}<br><span class="muted xs">seat ${naira(e.basis_kobo)} · ${fmtD(e.created_at)}${e.status === 'PENDING' ? ' · ready ' + fmtD(e.release_at) : ''}</span></span>${pill({PENDING:['neutral','Waiting'], PAYABLE:['warn','Ready'], PAID:['good','Paid'], CANCELLED:['bad','Cancelled']}, e.status)}<span class="amt num">${naira(e.amount_kobo)}</span></div>`).join('') : '<div><span class="muted">No commission yet.</span></div>'}</div>`);
+}
+async function bulkRun(jobId, channel){
+  const box = $('#bk-progress');
+  const show = (h) => { if (box && box.isConnected) box.innerHTML = h; else toast(h.replace(/<[^>]+>/g, '')); };
+  let r = null, rounds = 0;
+  try {
+    do {
+      r = await API.fn('bulk-send', {job_id:jobId, channel});
+      show(`<p class="tip">Sending… <b>${r.sent}</b> sent, <b>${r.failed}</b> failed, ${r.pending} waiting (of ${r.total}).</p>`);
+      rounds++;
+    } while (r.pending > 0 && r.status !== 'CANCELLED' && rounds < 200);
+    show(`<p class="tip good">Finished: <b>${r.sent}</b> sent, <b>${r.failed}</b> failed (of ${r.total}).</p>`);
+    toast(`Done: ${r.sent} sent, ${r.failed} failed.`);
+  } catch(e){ show(`<p class="tip bad">${esc(e.message)} You can continue from the list below.</p>`); toast(e.message); }
 }
 function ticketSheet(id){
   const t = cache.tickets.find(x => x.id === id); if (!t) return;
@@ -911,7 +1064,7 @@ function ticketSheet(id){
 async function run(btn, fn, ok, after){
   const old = btn ? btn.innerHTML : '';
   if (btn){ btn.disabled = true; btn.textContent = 'Working…'; }
-  try { await fn(); toast(ok); closeSheet(); if (after !== false) await reload(); return true; }
+  try { await fn(); toast(ok); closeSheet(); if (typeof after === 'function') await after(); if (after !== false) await reload(); return true; }
   catch(e){ toast(e.message); if (e.status === 403) deniedScreen(); return false; }
   finally { if (btn && btn.isConnected){ btn.disabled = false; btn.innerHTML = old; } }
 }
@@ -969,6 +1122,19 @@ document.addEventListener('click', async e => {
       run(el, () => API.rpc('admin_dispute_action', {p_id:id, p_action:v, p_amount_kobo:v === 'PARTIAL_REFUND' ? amt : null, p_note:note}), 'Done.'); break; }
     case 'mrefund': run(el, () => API.rpc('admin_refund', {p_id:id, p_amount_kobo:v === 'part' ? toKobo($('#ms-amt').value) : null, p_note:$('#ms-note').value}), 'Refunded to the member\'s wallet.'); break;
     case 'mrelease': run(el, () => API.rpc('admin_release', {p_id:id, p_note:$('#ms-note').value}), 'Released to the host.'); break;
+    case 'cardpay': run(el, async () => { await API.rpc('admin_set_card_payments', {p_on:v === '1'}); SETTINGS = await API.rpc('admin_get_settings'); }, v === '1' ? 'Card payments are ON.' : 'Card payments are OFF. Customers will see bank transfer only.'); break;
+    case 'movesheet': moveSheet(id); break;
+    case 'mvcancel': run(el, () => API.rpc('admin_cancel_move', {p_id:id, p_note:''}), 'Move cancelled. The member was told.'); break;
+    case 'creator': creatorSheet(id); break;
+    case 'creatordetail': creatorDetail(id); break;
+    case 'preppay': { let msg = '';
+      if (await run(el, async () => { const r = await API.rpc('admin_prepare_creator_payouts', {p_label:null}); msg = r.payouts ? `${r.payouts} payout(s) ready: ${naira(r.total_kobo)}.` : 'Nothing new is ready yet. Commission becomes ready when the host\'s escrow ends.'; }, 'Payouts updated.')) toast(msg);
+      break; }
+    case 'cpay': run(el, () => API.rpc('admin_creator_payout_action', {p_id:id, p_action:v, p_note:''}), v === 'PAID' ? 'Marked as paid. The creator was told.' : v === 'WALLET' ? 'Added to the creator\'s wallet.' : 'Payout cancelled.'); break;
+    case 'bkall': { const t = await API.rpc('admin_bulk_audience', {p_channel:v}).catch(e => { toast(e.message); return null; }); if (t == null) break;
+      const box = $('#bk-to'); box.value = t; $('#bk-count').textContent = `${t ? t.split('\n').length : 0} added`; break; }
+    case 'bkgo': { const old = el.innerHTML; el.disabled = true; el.textContent = 'Sending…'; await bulkRun(id, v); await reload(); break; }
+    case 'bkcancel': run(el, () => API.rpc('admin_bulk_cancel', {p_job:id}), 'Stopped.'); break;
     case 'tclose': run(el, () => API.rpc('admin_reply_ticket', {p_id:id, p_body:$('#tr-body').value, p_close:true}), 'Conversation closed.'); break;
   }
 });
@@ -989,6 +1155,15 @@ document.addEventListener('change', e => {
   if (e.target.id === 'pr-file') pickImage(e.target.files[0], 'banners', '#pr-banner', '#pr-prev', '#pr-up-msg');
 });
 document.addEventListener('input', e => { if (['pl-price','pl-seats','pl-min','pl-max'].includes(e.target.id)) planPreview(); });
+document.addEventListener('input', e => {
+  if (e.target.id === 'cr-code'){ const sl = $('#cr-slug'); if (sl) sl.textContent = (e.target.value.replace(/[^A-Za-z0-9]/g, '') || 'code').toLowerCase(); }
+  if (e.target.id === 'bk-msg'){ const n = e.target.value.length, l = $('#bk-len'); if (l && $('#f-bulk').dataset.ch === 'SMS') l.textContent = `${n} / 640 characters · ${Math.max(1, Math.ceil(n / 160))} SMS page(s) per person`; else if (l) l.textContent = `${n} characters`; }
+  if (e.target.id === 'bk-to'){ const c = $('#bk-count'); if (c) c.textContent = `${e.target.value.split(/[\n,;]+/).filter(x => x.trim()).length} entered`; }
+});
+document.addEventListener('change', e => {
+  if (['mv-to','mv-payold','mv-cover'].includes(e.target.id)) moveQuote();
+  if (e.target.id === 'cr-type'){ const l = $('#cr-val-l'); if (l) l.textContent = e.target.value === 'FLAT' ? 'Amount (₦)' : 'Percentage (%)'; }
+});
 document.addEventListener('change', e => { if (e.target.id === 'al-plan') alSync(); if (e.target.id === 'al-markup' || e.target.id === 'al-seats') alSync(true); });
 document.addEventListener('change', e => { if (e.target.id === 'ledger-type'){ filter.type = e.target.value; show('wallet', true); } });
 document.addEventListener('input', e => { if (e.target.closest && e.target.closest('#f-fees')) feeTry(); });
@@ -1038,7 +1213,8 @@ document.addEventListener('submit', async e => {
     case 'f-plan': run(btn, () => API.rpc('admin_save_plan', {p:{id:f.dataset.id || null, service_id:f.dataset.s, name:val('pl-name'), normal_price_kobo:toKobo(val('pl-price')),
       compare_price_kobo:val('pl-compare') ? toKobo(val('pl-compare')) : null, max_seats:+val('pl-seats'), duration_days:+val('pl-days'), min_markup_pct:+val('pl-min'), max_markup_pct:+val('pl-max'),
       access_type:val('pl-access'), verification_required:chk('pl-ver'), host_proof_required:chk('pl-proof'), active:chk('pl-active'),
-      customer_instructions:val('pl-cust'), host_instructions:val('pl-host'), notes:val('pl-notes'), sort:+val('pl-sort') || 0}}), 'Plan saved. Listings now use these rules.'); break;
+      customer_instructions:val('pl-cust'), host_instructions:val('pl-host'), notes:val('pl-notes'), sort:+val('pl-sort') || 0,
+      allowed_months:[...document.querySelectorAll('.pl-len:checked')].map(x => +x.value)}}), 'Plan saved. Listings now use these rules.'); break;
     case 'f-alist': {
       const x = alPlans().find(x => x.p.id === val('al-plan')), file = $('#al-proof') && $('#al-proof').files[0];
       if (!x){ toast('Pick a subscription and plan.'); break; }
@@ -1056,11 +1232,36 @@ document.addEventListener('submit', async e => {
       if (done){ filter = {status:'LIVE'}; await show('listings', true); }
       break; }
     case 'f-treply': run(btn, () => API.rpc('admin_reply_ticket', {p_id:f.dataset.id, p_body:val('tr-body'), p_close:false}), 'Reply sent.'); break;
+    case 'f-move': {
+      const body = {p_membership:f.dataset.id, p_target:val('mv-to'), p_pay_old:chk('mv-payold'), p_cover:chk('mv-cover'), p_contact:val('mv-contact').trim(), p_note:val('mv-note').trim()};
+      let res = null;
+      const ok = await run(btn, async () => { res = await API.rpc('admin_move_member', body); }, 'Done.', false);
+      if (ok){ toast(res && res.done ? (res.difference_kobo < 0 ? `Moved. ${naira(-res.difference_kobo)} went back to the member's wallet.` : 'Moved. Everyone was told.') : `The member was asked to pay ${naira(res.difference_kobo)} to finish the move.`); await reload(); }
+      break; }
+    case 'f-creator': {
+      const flat = val('cr-type') === 'FLAT', num = parseFloat(String(val('cr-val')).replace(/[,₦%\s]/g, '')) || 0;
+      run(btn, () => API.rpc('admin_save_creator', {p:{id:f.dataset.id || null, username:val('cr-user').trim().replace(/^@/, '').toLowerCase(), code:val('cr-code').trim(),
+        commission_type:flat ? 'FLAT' : 'PERCENT', commission_bps:flat ? 0 : Math.round(num * 100), commission_flat_kobo:flat ? Math.round(num * 100) : 0,
+        first_purchase_only:chk('cr-first'), bank_name:val('cr-bank'), account_number:val('cr-acct').replace(/\D/g, ''), account_name:val('cr-name'), notes:val('cr-notes'), active:chk('cr-active')}}),
+        f.dataset.id ? 'Creator saved.' : 'Creator added. Their code and link work now.'); break; }
+    case 'f-bulk': {
+      if (!btn.dataset.armed){ btn.dataset.armed = '1'; const o = btn.innerHTML; btn.textContent = btn.dataset.confirm; setTimeout(() => { if (btn.isConnected){ delete btn.dataset.armed; btn.innerHTML = o; } }, 3500); break; }
+      delete btn.dataset.armed;
+      const ch = f.dataset.ch; let job = null;
+      btn.disabled = true; btn.textContent = 'Checking the list…';
+      try { job = await API.rpc('admin_bulk_create', {p_channel:ch, p_subject:val('bk-subj'), p_message:val('bk-msg'), p_recipients:val('bk-to')}); }
+      catch(err){ toast(err.message); btn.disabled = false; btn.textContent = 'Send'; break; }
+      if (job.invalid && job.invalid.length) toast(`${job.invalid.length} skipped (not valid): ${job.invalid.slice(0, 5).join(', ')}${job.invalid.length > 5 ? '…' : ''}`);
+      btn.textContent = `Sending to ${job.valid}…`;
+      await bulkRun(job.job_id, ch);
+      setTimeout(() => reload(), 1500);
+      break; }
     case 'f-settings': run(btn, () => API.rpc('admin_save_settings', {p:{site_name:val('st-name'), hero_title:val('st-title'), hero_text:val('st-text'), notice:val('st-notice'),
       categories:val('st-cats').split(',').map(c => c.trim()).filter(Boolean), support_whatsapp:val('st-wa'), support_whatsapp_link:val('st-walink').trim(), support_email:val('st-email').trim(),
       min_withdrawal_kobo:toKobo(val('st-minw')), min_topup_kobo:toKobo(val('st-mint')), max_topup_kobo:toKobo(val('st-maxt')),
-      renewal_window_days:+val('st-renew'), reminder_days:+val('st-remind'), auto_approve_listings:chk('st-auto'), maintenance_mode:chk('st-maint'), maintenance_message:val('st-maintmsg'),
-      manual_funding_enabled:chk('st-manual'), manual_bank_name:val('st-mbank'), manual_account_number:val('st-macct'), manual_account_name:val('st-mname'), admin_notify_email:val('st-alert').trim()}}), 'Settings saved.'); break;
+      renewal_window_days:+val('st-renew'), reminder_days:+val('st-remind'), host_reminder_days:+val('st-hostremind'), auto_renew_grace_hours:+val('st-grace'),
+      card_payments_enabled:chk('st-card'), auto_approve_listings:chk('st-auto'), maintenance_mode:chk('st-maint'), maintenance_message:val('st-maintmsg'),
+      manual_funding_enabled:chk('st-manual'), manual_bank_name:val('st-mbank'), manual_account_number:val('st-macct'), manual_account_name:val('st-mname'), admin_notify_email:val('st-alert').trim()}}), 'Settings saved.', async () => { SETTINGS = await API.rpc('admin_get_settings'); }); break;
     case 'f-broadcast': {
       if (!btn.dataset.armed){ btn.dataset.armed = '1'; const o = btn.innerHTML; btn.textContent = btn.dataset.confirm; setTimeout(() => { if (btn.isConnected){ delete btn.dataset.armed; btn.innerHTML = o; } }, 3500); break; }
       run(btn, async () => { const n = await API.rpc('admin_broadcast', {p_title:val('bc-title'), p_body:val('bc-body'), p_username:val('bc-user').trim() || null}); toast(`Sent to ${n} user(s).`); }, 'Notification sent.'); break; }

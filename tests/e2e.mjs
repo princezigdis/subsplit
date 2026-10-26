@@ -108,7 +108,7 @@ await step('buyer explore', async () => {
   await buyer.waitForSelector('#feed .card');
   const cardText = await buyer.textContent('#feed .card');
   check('Card: price ₦2,550/month, was ₦8,500, Save ₦5,950', cardText.includes('₦2,550/month') && cardText.includes('₦8,500') && cardText.includes('Save ₦5,950'), cardText);
-  check('Card: "4 of 4 seats available", host, access, duration', cardText.includes('4 of 4 seats available') && cardText.includes('@host') && cardText.includes('Shared login') && cardText.includes('30 days'));
+  check('Card: "4 of 4 seats available", host, access, lengths', cardText.includes('4 of 4 seats available') && cardText.includes('@host') && cardText.includes('Shared login') && cardText.includes('1, 3, 6 or 12 months'));
   check('Explore never contains the password', !(await buyer.content()).includes('S3cret'));
   await buyer.screenshot({ path: SHOTS + '/2-explore.png' });
 });
@@ -116,7 +116,8 @@ let seatRef = '';
 await step('buyer pays for seat with Flutterwave', async () => {
   await buyer.click('#feed .card [data-act=join]'); await buyer.waitForSelector('text=Confirm your seat');
   const t = await buyer.textContent('#sheet-box');
-  check('Confirm screen shows service, price, ₦200 fee, total ₦2,750', ['Netflix · Premium', '₦2,550/month', '30 days', 'Shared login', '@host', 'Available seats', 'Transaction fee', '₦200', 'Total to pay', '₦2,750'].every(x => t.includes(x)));
+  check('Confirm screen shows service, price, ₦200 fee, total ₦2,750', ['Netflix', 'Premium', '₦2,550/month', '1 month · 30 days', 'Shared login', '@host', 'available seats', 'Transaction fee', '₦200', 'Total to pay', '₦2,750'].every(x => t.includes(x)), t.slice(0, 300));
+  check('Confirm screen offers 1, 3, 6 and 12 months with a start date', (await buyer.$$eval('[data-act=jlen]', b => b.map(x => x.dataset.v).join(','))) === '1,3,6,12' && !!(await buyer.$('#j-start')) && t.includes('Ends on'));
   await buyer.screenshot({ path: SHOTS + '/3-confirm.png' });
   await buyer.click('[data-act=payCard]'); await buyer.waitForURL(/flw\/checkout/);
   seatRef = buyer.url().split('/').pop();
@@ -490,6 +491,214 @@ await step('admin add listing', async () => {
   check('Explore never contains the admin listing password', !(await buyer.content()).includes('Adm1nOnly'));
   const r = await host.evaluate(async () => { try { await API.rpc('admin_add_listing', {p_listing:'11111111-1111-4111-8111-111111111111', p_plan:'11111111-1111-4111-8111-111111111111', p_markup_pct:20, p_seats:1, p_proof_path:'x'}); return 'ok'; } catch (e) { return e.message; } });
   check('A normal user cannot use the admin shortcut', /admins only/i.test(r), r);
+});
+
+// ====================== 017: card switch, lengths, renewals, moves, creators, bulk messages ======================
+const lagosDay = n => new Date(Date.now() + 36e5 + n * 864e5).toISOString().slice(0, 10);
+const fund = (email, kobo) => sql(`select _post(id, 'WALLET', 'TOP_UP', ${kobo}, 'e2e money', _ref('E2E')) from profiles where email = '${email}'`);
+const twice = async (p, sel) => { await p.click(sel); await p.click(sel); };
+const ownU = sql(`select username from profiles where email = 'owner@subsplit.ng'`);
+const hostNf = () => sql(`select l.id from listings l join service_plans p on p.id = l.plan_id join services s on s.id = p.service_id join profiles h on h.id = l.host_id where h.email = 'host@subsplit.ng' and s.name = 'Netflix' order by l.created_at limit 1`);
+const NF = '.card:has(h3:text-is("Netflix"))';
+
+await step('card payments switch', async () => {
+  await admin.click('.side [data-v=dashboard]'); await admin.waitForSelector('h1:has-text("Dashboard")');
+  check('Dashboard shows the Flutterwave switch (ON)', (await admin.textContent('main')).includes('Card payments (Flutterwave)') && !!(await admin.$('[data-act=cardpay][data-v="0"]')));
+  await twice(admin, '[data-act=cardpay][data-v="0"]');
+  check('Admin switches card payments OFF', /OFF/.test(await toast(admin)) && sql(`select card_payments_enabled from platform_settings`) === 'f');
+  sql(`update platform_settings set manual_funding_enabled = false`);
+  await buyer.goto(B); await buyer.waitForSelector('.hero');
+  await buyer.click('.nav [data-v=wallet]'); await buyer.click('.money [data-act=fund]'); await buyer.waitForSelector('#sheet:not([hidden])');
+  check('Card OFF + bank transfer OFF: the app says adding money is paused', (await buyer.textContent('#sheet-box')).includes('Adding money is paused'));
+  sql(`update platform_settings set manual_funding_enabled = true`);
+  await buyer.goto(B); await buyer.waitForSelector('.hero');
+  await buyer.click('.nav [data-v=wallet]'); await buyer.click('.money [data-act=fund]'); await buyer.waitForSelector('#f-fund');
+  const t = await buyer.textContent('#sheet-box');
+  check('Card OFF: only "Pay by bank transfer" is shown (no Flutterwave)', t.includes('Pay by bank transfer') && !t.includes('Continue to payment'), t.slice(0, 200));
+  const r = await buyer.evaluate(async () => { try { await API.fn('payments-init', {purpose:'TOPUP', amount_kobo:500000}); return 'ok'; } catch (e) { return e.message; } });
+  check('Card OFF: the server refuses a Flutterwave payment even if someone forces it', /switched off/i.test(r), r);
+  await buyer.click('#sheet-box [data-act=close]');
+  await twice(admin, '[data-act=cardpay][data-v="1"]');
+  check('Admin switches card payments back ON', /ON/.test(await toast(admin)) && sql(`select card_payments_enabled from platform_settings`) === 't');
+});
+
+await step('buy 3 months with a start date', async () => {
+  fund('buyer@subsplit.ng', 2000000);
+  await buyer.goto(B); await buyer.waitForSelector('#feed .card');
+  await buyer.click(`#feed .card:has-text("@${ownU}") [data-act=join]`); await buyer.waitForSelector('#j-start');
+  await buyer.click('[data-act=jlen][data-v="3"]');
+  const day = lagosDay(5);
+  await buyer.fill('#j-start', day); await buyer.dispatchEvent('#j-start', 'change');
+  const t = await buyer.textContent('#sheet-box');
+  check('3 months: ₦2,700 × 3 + ₦200 = ₦8,300, 90 days, with an end date', t.includes('₦8,300') && t.includes('3 months · 90 days') && (await buyer.textContent('#j-end')).trim().length > 5, t.slice(0, 400));
+  await buyer.screenshot({ path: SHOTS + '/9-confirm-months.png' });
+  await buyer.click('[data-act=payWallet]');
+  check('Paid from the wallet for 3 months', /3 months/.test(await toast(buyer)));
+  const rows = sql(`select count(*) || '|' || min(to_char(starts_at at time zone 'Africa/Lagos', 'YYYY-MM-DD')) from memberships m join profiles p on p.id = m.buyer_id join listings l on l.id = m.listing_id join profiles h on h.id = l.host_id where p.email = 'buyer@subsplit.ng' and h.email = 'owner@subsplit.ng'`);
+  check('3 monthly rows, starting on the chosen day', rows === `3|${day}`, rows);
+  await buyer.click('#sheet-box [data-act=close]').catch(() => {});
+  await buyer.click('.nav [data-v=mysubs]'); await buyer.waitForSelector('h1:has-text("My Subs")');
+  const card = await buyer.textContent(`.card:has-text("@${ownU}")`);
+  check('My Subs shows the reserved seat with its start date', card.includes('Starts') && card.includes('reserved'), card.slice(0, 200));
+  await buyer.check(`.card:has-text("@${ownU}") [data-act2=autorenew]`);
+  check('Auto-renew switch works', /Auto-renew is on/.test(await toast(buyer)) && sql(`select bool_and(auto_renew) from memberships m join profiles p on p.id = m.buyer_id join listings l on l.id = m.listing_id join profiles h on h.id = l.host_id where p.email = 'buyer@subsplit.ng' and h.email = 'owner@subsplit.ng'`) === 't');
+  await buyer.screenshot({ path: SHOTS + '/10-mysubs-months.png' });
+});
+
+const ren = await newPage(); PAGES.ren = ren;
+await step('member renews from the "Will you renew?" question', async () => {
+  await signUp(ren, 'Remi Renew', 'remi@subsplit.ng');
+  const lid = hostNf();
+  sql(`update listings set seats_offered = 4 where id = '${lid}'`);
+  fund('remi@subsplit.ng', 3000000);
+  const j = await ren.evaluate(async (id) => { try { return (await API.rpc('join_with_wallet', {p_listing:id, p_contact:'', p_months:1})).membership_id; } catch (e) { return 'ERR ' + e.message; } }, lid);
+  check('Remi joins Hannah\'s Netflix for 1 month', !String(j).startsWith('ERR'), j);
+  sql(`update memberships set starts_at = now() - interval '28 days', ends_at = now() + interval '2 days', release_at = now() + interval '2 days' where id = '${j}'`);
+  await ren.goto(B); await ren.waitForSelector('.hero'); await ren.click('.nav [data-v=mysubs]'); await ren.waitForSelector('h1:has-text("My Subs")');
+  check('2 days before the end the card asks "Will you renew it?"', (await ren.textContent('main')).includes('Will you renew it?'));
+  await ren.screenshot({ path: SHOTS + '/11-ask-renew.png' });
+  await ren.click('[data-act=renewSheet]'); await ren.waitForSelector('#rn-sum');
+  await ren.click('[data-act=rnlen][data-v="3"]');
+  const t = await ren.textContent('#sheet-box');
+  check('Renew sheet: 3 × ₦2,700 + ₦200 = ₦8,300', t.includes('₦8,300') && t.includes('3 × ₦2,700'), t.replace(/\s+/g, ' ').slice(0, 300));
+  await ren.click('[data-act=renewNow]');
+  check('Renewed for 3 months', /Renewed/.test(await toast(ren)) && sql(`select count(*) from memberships m join profiles p on p.id = m.buyer_id where p.email = 'remi@subsplit.ng'`) === '4');
+  check('Card now says "Paid until" with 3 more months', /Paid until/.test(await ren.textContent('main')) && (await ren.textContent('main')).includes('3 more months'));
+});
+
+await step('member says "I won\'t renew"', async () => {
+  sql(`with x as (select m.id, (select max(ends_at) from memberships y where y.order_ref = m.order_ref) - (now() + interval '2 days') d
+        from memberships m join profiles p on p.id = m.buyer_id join listings l on l.id = m.listing_id join profiles h on h.id = l.host_id
+        where p.email = 'buyer@subsplit.ng' and h.email = 'owner@subsplit.ng')
+       update memberships m set starts_at = m.starts_at - x.d, ends_at = m.ends_at - x.d, release_at = m.ends_at - x.d from x where x.id = m.id`);
+  sql(`select release_due_escrow()`);
+  await buyer.goto(B); await buyer.waitForSelector('.hero'); await buyer.click('.nav [data-v=mysubs]'); await buyer.waitForSelector('h1:has-text("My Subs")');
+  const c = `.card:has-text("@${ownU}")`;
+  check('Buyer with auto-renew on is not nagged, the switch shows ON', (await buyer.isChecked(`${c} [data-act2=autorenew]`)));
+  await buyer.uncheck(`${c} [data-act2=autorenew]`); await toast(buyer);
+  check('After switching auto-renew off, the question appears', (await buyer.textContent(c)).includes('Will you renew it?'));
+  await buyer.click(`${c} [data-act=noRenew]`);
+  check('"I won\'t renew" is saved and the host is told', /ends on/.test(await toast(buyer))
+    && sql(`select renew_choice from memberships m join profiles p on p.id = m.buyer_id where p.email = 'buyer@subsplit.ng' and m.status = 'ACTIVE' and not m.renewed and m.ends_at > now() order by ends_at desc limit 1`) === 'NO'
+    && +sql(`select count(*) from notifications n join profiles p on p.id = n.user_id where p.email = 'owner@subsplit.ng' and n.title like '%will not renew%'`) >= 1);
+  check('Card shows "You chose not to renew" with an undo', (await buyer.textContent(c)).includes('You chose not to renew'));
+});
+
+await step('host "Will you renew your plan?"', async () => {
+  const lid = hostNf();
+  sql(`update listings set host_paid_until = now() + interval '3 days' where id = '${lid}'`);
+  await host.goto(B); await host.waitForSelector('.hero'); await host.click('.nav [data-v=mysubs]'); await host.click('[data-act=subs][data-v=hosting]');
+  check('Host card asks "Will you renew your Netflix plan?"', (await host.textContent(NF)).includes('Will you renew your Netflix plan?'));
+  await host.screenshot({ path: SHOTS + '/12-host-renew.png' });
+  await host.click(`${NF} [data-act=hostRenew][data-v="1"]`);
+  check('"I will renew": confirmed for another month', /confirmed/.test(await toast(host)) && sql(`select host_paid_until > now() + interval '30 days' from listings where id = '${lid}'`) === 't');
+  sql(`update listings set host_paid_until = now() + interval '3 days' where id = '${lid}'`);
+  await host.goto(B); await host.waitForSelector('.hero'); await host.click('.nav [data-v=mysubs]'); await host.click('[data-act=subs][data-v=hosting]');
+  await host.click(`${NF} [data-act=hostNoRenew]`); await host.waitForSelector('text=Not renewing?');
+  check('"I won\'t renew" explains what happens first', (await host.textContent('#sheet-box')).includes('Later months are refunded'));
+  await host.click('#sheet-box [data-act=hostRenew][data-v="0"]');
+  check('Listing stops taking members', /No new members/.test(await toast(host)) && sql(`select status || ':' || host_stopping from listings where id = '${lid}'`) === 'PAUSED:true');
+  check('Remi\'s months after the host\'s end date were refunded (2 of them)', sql(`select count(*) from memberships m join profiles p on p.id = m.buyer_id where p.email = 'remi@subsplit.ng' and m.status = 'REFUNDED'`) === '2');
+  check('Remi was told the host is not renewing', +sql(`select count(*) from notifications n join profiles p on p.id = n.user_id where p.email = 'remi@subsplit.ng' and n.type = 'HOST_NOT_RENEWING'`) === 1);
+  await host.click(`${NF} [data-act=hostRenew][data-v="1"]`);
+  check('"I changed my mind" opens the listing again', /confirmed/.test(await toast(host)) && sql(`select status || ':' || host_stopping from listings where id = '${lid}'`) === 'LIVE:false');
+});
+
+await step('admin moves a member to another plan', async () => {
+  await admin.click('.side [data-v=memberships]'); await admin.waitForSelector('h1:has-text("Memberships")');
+  const mid = sql(`select m.id from memberships m join profiles p on p.id = m.buyer_id where p.email = 'remi@subsplit.ng' and m.status = 'ACTIVE' and m.starts_at <= now() order by m.starts_at limit 1`);
+  await admin.click(`[data-act=membership][data-id="${mid}"]`); await admin.waitForSelector('[data-act=movesheet]');
+  await admin.click('[data-act=movesheet]'); await admin.waitForSelector('#mv-to');
+  const opt = await admin.evaluate((u) => [...document.querySelectorAll('#mv-to option')].find(o => o.textContent.includes('@' + u)).value, ownU);
+  await admin.selectOption('#mv-to', opt); await admin.waitForFunction(() => /Unused part credited/.test(document.querySelector('#mv-quote').textContent));
+  const q = await admin.textContent('#mv-quote');
+  check('Quote shows the credit, the new cost and the difference (same price: ₦0)', q.includes('Unused part credited') && q.includes('New plan, same days') && /Difference₦0/.test(q.replace(/\s+/g, '')), q.replace(/\s+/g, ' '));
+  await admin.uncheck('#mv-payold'); await admin.waitForFunction(() => /Left over/.test(document.querySelector('#mv-quote').textContent));
+  check('Unticking "pay the old host" credits the whole current month: change goes to the wallet', (await admin.textContent('#mv-quote')).includes('Left over'));
+  await admin.check('#mv-payold'); await admin.waitForFunction(() => !/Left over/.test(document.querySelector('#mv-quote').textContent));
+  await admin.screenshot({ path: SHOTS + '/13-admin-move.png' });
+  await admin.click('#f-move [type=submit]');
+  check('Moved at once (no difference to pay)', /Moved/.test(await toast(admin)));
+  check('Remi is now in the admin\'s Netflix plan with the same end date', sql(`select count(*) from memberships m join profiles p on p.id = m.buyer_id join listings l on l.id = m.listing_id join profiles h on h.id = l.host_id
+     where p.email = 'remi@subsplit.ng' and h.email = 'owner@subsplit.ng' and m.status = 'ACTIVE'`) === '2'
+    && sql(`select count(*) from memberships m join profiles p on p.id = m.buyer_id join listings l on l.id = m.listing_id join profiles h on h.id = l.host_id
+     where p.email = 'remi@subsplit.ng' and h.email = 'host@subsplit.ng' and m.status = 'ACTIVE' and m.ends_at > now()`) === '0');
+  check('Remi was told', +sql(`select count(*) from notifications n join profiles p on p.id = n.user_id where p.email = 'remi@subsplit.ng' and n.type = 'SEAT_MOVED'`) === 1);
+  check('Ledger still balanced after the move', sql(`select count(*) from wallet_accounts a left join (select account_id, sum(amount_kobo) s from wallet_transactions group by account_id) t on t.account_id = a.id where a.balance_kobo <> coalesce(t.s, 0)`) === '0');
+});
+
+await step('creators: code, link, dashboard, payout', async () => {
+  const hu = sql(`select username from profiles where email = 'host@subsplit.ng'`);
+  await admin.click('.side [data-v=creators]'); await admin.waitForSelector('h1:has-text("Creators")');
+  await admin.click('[data-act=creator]'); await admin.waitForSelector('#f-creator');
+  await admin.fill('#cr-user', hu); await admin.fill('#cr-code', 'Hannah'); await admin.fill('#cr-val', '5');
+  await admin.selectOption('#cr-bank', 'Kuda'); await admin.fill('#cr-acct', '2012345678'); await admin.fill('#cr-name', 'Hannah Host');
+  check('Link preview follows the code', (await admin.textContent('#cr-slug')).trim() === 'hannah');
+  await admin.click('#f-creator [type=submit]');
+  check('Admin adds a creator with code HANNAH', /Creator added/.test(await toast(admin)) && sql(`select code || '|' || commission_bps || '|' || bank_name from creators`) === 'HANNAH|500|Kuda');
+  const fan = await newPage(); PAGES.fan = fan;
+  await fan.goto(B + '/hannah'); await fan.waitForSelector('#a-ref');
+  check('splitsub.app/hannah opens sign-up with the code filled in', (await fan.inputValue('#a-ref')) === 'HANNAH');
+  await fan.fill('#a-name', 'Funmi Fan'); await fan.fill('#a-phone', '08031234567'); await fan.fill('#a-email', 'funmi@subsplit.ng'); await fan.fill('#a-pass', 'password123');
+  await fan.click('#f-signup [type=submit]'); await toast(fan);
+  check('The fan counts for the creator', sql(`select count(*) from referrals r join profiles p on p.id = r.referrer_id join profiles f on f.id = r.referred_id where p.email = 'host@subsplit.ng' and f.email = 'funmi@subsplit.ng' and r.code = 'HANNAH'`) === '1');
+  fund('funmi@subsplit.ng', 1000000);
+  const lid = sql(`select l.id from listings l join profiles h on h.id = l.host_id where h.email = 'owner@subsplit.ng' and l.status = 'LIVE' limit 1`);
+  sql(`update listings set seats_offered = 4 where id = '${lid}'`);
+  const j = await fan.evaluate(async (id) => { try { return (await API.rpc('join_with_wallet', {p_listing:id, p_contact:'', p_months:1})).membership_id; } catch (e) { return 'ERR ' + e.message; } }, lid);
+  check('Fan buys a seat: 5% commission waits in escrow', !String(j).startsWith('ERR') && sql(`select amount_kobo || '|' || status from creator_earnings`) === '13500|PENDING', j + ' ' + sql(`select coalesce(string_agg(amount_kobo || '|' || status, ','), '-') from creator_earnings`));
+  await host.goto(B); await host.waitForSelector('.hero'); await host.click('.nav [data-v=account]');
+  const acc = await host.textContent('main');
+  check('Creator sees their dashboard: code, link, 1 sign-up, ₦135 waiting', acc.includes('Creator dashboard') && acc.includes('HANNAH') && acc.includes('/hannah') && acc.includes('₦135'), acc.slice(0, 200));
+  await host.screenshot({ path: SHOTS + '/14-creator-dashboard.png', fullPage: true });
+  sql(`update memberships set release_at = now() - interval '1 minute' where id = '${j}'`); sql(`select release_due_escrow()`);
+  await admin.click('.side [data-v=creators]'); await admin.waitForSelector('h1:has-text("Creators")');
+  await twice(admin, '[data-act=preppay]');
+  await admin.waitForFunction(() => /payout\(s\) ready/.test(document.getElementById('toast').textContent), null, { timeout: 10000 });
+  check('Month-end payout prepared', sql(`select count(*) || '|' || sum(amount_kobo) from creator_payouts where status = 'DUE'`) === '1|13500');
+  await admin.waitForSelector('[data-act=cpay][data-v=WALLET]');
+  check('Payout card shows the creator\'s bank details', (await admin.textContent('main')).includes('2012345678'));
+  await admin.screenshot({ path: SHOTS + '/15-admin-creators.png', fullPage: true });
+  const before = wallet('host@subsplit.ng');
+  await twice(admin, '[data-act=cpay][data-v=WALLET]');
+  await admin.waitForFunction(() => /creator's wallet/.test(document.getElementById('toast').textContent), null, { timeout: 10000 });
+  check('"Pay to wallet" adds ₦135 to the creator\'s wallet', wallet('host@subsplit.ng') - before === 13500 && sql(`select status || ':' || method from creator_payouts`) === 'PAID:WALLET');
+  await fan.close();
+});
+
+await step('bulk messages: email, SMS, WhatsApp', async () => {
+  await admin.click('.side [data-v=messages]'); await admin.waitForSelector('h1:has-text("Bulk messages")');
+  check('Email is shown as connected', (await admin.textContent('main')).includes('Email is connected'));
+  await admin.fill('#bk-to', 'ada@gmail.com\nnot-an-email\nbounce@test.ng\nADA@gmail.com');
+  await admin.fill('#bk-subj', 'SplitSub is live'); await admin.fill('#bk-msg', 'Split premium subscriptions and pay only for your seat.\nsplitsub.app');
+  await twice(admin, '#f-bulk [type=submit]');
+  await admin.waitForSelector('#bk-progress .tip.good, #bk-progress .tip.bad', { timeout: 20000 });
+  const pr = await admin.textContent('#bk-progress');
+  check('Email: 1 sent, 1 failed (bad address), invalid one skipped, duplicate removed', pr.includes('1 sent') && pr.includes('1 failed'), pr);
+  await admin.screenshot({ path: SHOTS + '/16-admin-bulk.png', fullPage: true });
+  await admin.waitForTimeout(1700);
+  await admin.click('[data-act=filter][data-k=ch][data-v=SMS]'); await admin.waitForSelector('#bk-to');
+  await admin.fill('#bk-to', '0803 123 4567\n+2348050000000');
+  await admin.fill('#bk-msg', 'SplitSub is live! Split Netflix and more. splitsub.app');
+  await twice(admin, '#f-bulk [type=submit]');
+  await admin.waitForSelector('#bk-progress .tip.good, #bk-progress .tip.bad', { timeout: 20000 });
+  check('SMS: 1 sent, 1 failed', (await admin.textContent('#bk-progress')).includes('1 sent'));
+  await admin.waitForTimeout(1700);
+  await admin.click('[data-act=filter][data-k=ch][data-v=WHATSAPP]'); await admin.waitForSelector('#bk-to');
+  await admin.fill('#bk-to', '08039999999\n08051112222\n08061112222');
+  await admin.fill('#bk-msg', 'Hello from SplitSub.\nYour seat is waiting.');
+  await twice(admin, '#f-bulk [type=submit]');
+  await admin.waitForSelector('#bk-progress .tip.good, #bk-progress .tip.bad', { timeout: 20000 });
+  check('WhatsApp: 2 sent, 1 failed (not on WhatsApp)', (await admin.textContent('#bk-progress')).includes('2 sent'));
+  const sent = await (await fetch(B + '/test/sent')).json();
+  check('Providers got the right messages: email subject, SMS sender, WhatsApp template (no new lines inside)',
+    sent.some(x => x.channel === 'EMAIL' && x.to === 'ada@gmail.com' && x.subject === 'SplitSub is live')
+    && sent.some(x => x.channel === 'SMS' && x.to === '2348031234567' && x.from === 'SplitSub')
+    && sent.some(x => x.channel === 'WHATSAPP' && x.template === 'splitsub_update' && !/\n/.test(x.text)), JSON.stringify(sent).slice(0, 300));
+  await admin.waitForTimeout(1700);
+  check('History lists the 3 jobs with counts', +sql(`select count(*) from broadcast_jobs where status = 'DONE'`) === 3);
+  const r = await buyer.evaluate(async () => { try { await API.fn('bulk-send', {job_id:'11111111-1111-4111-8111-111111111111', channel:'EMAIL'}); return 'ok'; } catch (e) { return e.message; } });
+  check('A normal user cannot send bulk messages', /admins only|not allowed/i.test(r), r);
 });
 
 check('No JavaScript errors in either app', errors.length === 0, errors.slice(0, 5).join(' | '));

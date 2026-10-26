@@ -63,7 +63,7 @@ Deno.serve(async (req: Request) => {
   if (!who.ok) return reply({ error: "Your session expired. Please sign in again." }, 401);
   const user = await who.json();
 
-  let body: { purpose?: string; amount_kobo?: number; listing_id?: string; contact?: string } = {};
+  let body: { purpose?: string; amount_kobo?: number; listing_id?: string; contact?: string; months?: number; start_date?: string } = {};
   try { body = await req.json(); } catch { /* empty body */ }
   const purpose = body.purpose === "SEAT" ? "SEAT" : "TOPUP";
 
@@ -77,6 +77,8 @@ Deno.serve(async (req: Request) => {
       p_amount_kobo: purpose === "TOPUP" ? Math.round(Number(body.amount_kobo) || 0) : null,
       p_listing: purpose === "SEAT" ? body.listing_id ?? null : null,
       p_contact: String(body.contact ?? "").slice(0, 120),
+      p_months: purpose === "SEAT" ? Math.round(Number(body.months) || 1) : 1,
+      p_start: purpose === "SEAT" && /^\d{4}-\d{2}-\d{2}$/.test(String(body.start_date ?? "")) ? body.start_date : null,
     });
 
     // Flutterwave takes the amount in NAIRA (not kobo). It sends the customer back to redirect_url
@@ -90,7 +92,7 @@ Deno.serve(async (req: Request) => {
         currency: "NGN",
         redirect_url: SITE_URL,
         customer: { email: p.email || user.email, name: p.full_name || p.username || "SplitSub user" },
-        customizations: { title: "SplitSub", description: purpose === "SEAT" ? "Reserve your seat" : "Add money to your wallet", logo: SITE_URL.replace(/\/+$/, "") + "/logo-mark.svg" },
+        customizations: { title: "SplitSub", description: purpose === "SEAT" ? (Number(body.months) > 1 ? `Reserve your seat (${Math.round(Number(body.months))} months)` : "Reserve your seat") : "Add money to your wallet", logo: SITE_URL.replace(/\/+$/, "") + "/logo-mark.svg" },
         meta: { user_id: user.id, purpose, listing_id: body.listing_id ?? null },
       }),
     });

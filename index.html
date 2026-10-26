@@ -107,6 +107,15 @@ a{color:var(--brand-strong)}
 .chip{border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:999px;padding:8px 15px;font-weight:600;font-size:14px;white-space:nowrap;cursor:pointer;display:inline-flex;gap:6px;align-items:center}
 .chip[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
 .chip .n{opacity:.6;font-weight:700}
+.chips.lens{display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr))}
+.chip.len{display:grid;gap:2px;justify-items:center;text-align:center;padding:10px 12px;border-radius:14px;white-space:normal}
+.chip.len small{font-weight:600;opacity:.75;font-size:12px}
+.pair{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.dateout{display:block;background:var(--surface-2);border-radius:var(--r-sm);padding:12px 14px;font-size:16px}
+.ask{display:grid;gap:10px;background:var(--brand-soft);color:var(--brand-strong);border-radius:var(--r-sm);padding:12px 14px;font-size:14px}
+.ask b{color:var(--ink)}
+.switch{display:flex;gap:10px;align-items:flex-start;font-size:14px;cursor:pointer;padding:10px 12px;border-radius:var(--r-sm);background:var(--surface-2)}
+.switch input{width:20px;height:20px;margin:1px 0 0;flex:none;accent-color:var(--brand)}
 .sec-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:-6px}
 .sec-head h2{font-size:21px}
 
@@ -287,13 +296,23 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt
 const naira = k => { k = Number(k) || 0; const f = k % 100 !== 0; return '₦' + (k / 100).toLocaleString('en-NG', {minimumFractionDigits: f ? 2 : 0, maximumFractionDigits: 2}); };
 const toKobo = v => Math.round((parseFloat(String(v).replace(/[,₦\s]/g, '')) || 0) * 100);
 const ts = x => new Date(x).getTime();
-const fmtDate = t => new Date(t).toLocaleDateString('en-GB', {day:'numeric', month:'short', year:'numeric'});
-const fmtShort = t => new Date(t).toLocaleDateString('en-GB', {day:'numeric', month:'short'});
-const fmtDT = t => new Date(t).toLocaleString('en-GB', {day:'numeric', month:'short', hour:'numeric', minute:'2-digit'});
+// Dates are shown in Nigerian time (WAT), the same clock the server uses for start and end dates.
+const TZ = {timeZone:'Africa/Lagos'};
+const fmtDate = t => new Date(t).toLocaleDateString('en-GB', {...TZ, day:'numeric', month:'short', year:'numeric'});
+const fmtShort = t => new Date(t).toLocaleDateString('en-GB', {...TZ, day:'numeric', month:'short'});
+const fmtDT = t => new Date(t).toLocaleString('en-GB', {...TZ, day:'numeric', month:'short', hour:'numeric', minute:'2-digit'});
 const DAY = 864e5;
 const daysLeft = m => Math.max(0, Math.ceil((ts(m.ends_at) - Date.now()) / DAY));
 const initials = n => (n || '?').split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0].toUpperCase()).join('');
 const per = d => d === 30 ? '/month' : `/${d} days`;
+// plan lengths: 1, 3, 6 or 12 months (each "month" is one plan period, normally 30 days)
+const lenName = (n, d) => d === 30 ? ({1:'Monthly', 3:'3 months', 6:'6 months', 12:'Yearly'}[n] || `${n} months`) : `${n} × ${d} days`;
+const lenWord = n => n === 1 ? '1 month' : `${n} months`;
+const lensText = l => { const a = (l.allowed_months || [1]).slice().sort((x, y) => x - y); if (l.duration_days !== 30) return `${l.duration_days} days`; return a.length === 1 ? lenWord(a[0]) : a.slice(0, -1).join(', ') + ' or ' + a[a.length - 1] + ' months'; };
+const lagosToday = () => new Date(Date.now() + 36e5).toISOString().slice(0, 10);          // Lagos = UTC+1 all year
+const lagosPlus = n => new Date(Date.now() + 36e5 + n * DAY).toISOString().slice(0, 10);
+const startAt = iso => !iso || iso <= lagosToday() ? new Date() : new Date(iso + 'T00:00:00+01:00');
+const cardOn = () => settings().card_payments !== false;
 function textOn(hex){ const h = (hex || '#5B5BD6').replace('#', ''); const [r, g, b] = [0, 2, 4].map(i => parseInt(h.substr(i, 2), 16) / 255); return (0.2126*r + 0.7152*g + 0.0722*b) > 0.62 ? '#1A1A1A' : '#FFFFFF'; }
 // Display-only estimate. The database calculates the real price again.
 const seatPrice = (normal, seats, markup) => Math.round(normal * (100 + markup) / 100 / seats / 100) * 100;
@@ -357,7 +376,7 @@ function seatBar(total, taken){ return `<div class="seats" role="img" aria-label
 const hostTag = l => `<span class="host">@${esc(l.host_username)}${l.host_verified ? ic('badge') + 'Verified host' : ''}</span>`;
 
 /* ---------- state ---------- */
-let S = {catalog:null, listings:[], me:null, subs:[], hosting:[], wallet:null, notes:[], tickets:null, orders:[], requests:[], refs:null};
+let S = {catalog:null, listings:[], me:null, subs:[], hosting:[], wallet:null, notes:[], tickets:null, orders:[], requests:[], refs:null, creator:null};
 const UI = {tab:'explore', cat:'All', q:'', sort:'popular', access:'ANY', verified:false, withSeats:true, maxPrice:0, subs:'active', hide:false};
 // The public link always opens on Explore. Only the "hide balance" choice is remembered on this device.
 try { UI.hide = !!JSON.parse(localStorage.getItem('subsplit-ui') || '{}').hide; } catch(e){}
@@ -376,14 +395,14 @@ async function loadAll(){
   let mine = null;
   if (API.user){
     mine = rel.then(() => Promise.all([API.rpc('my_overview'), API.rpc('my_subscriptions'), API.rpc('my_listings'), API.rpc('my_wallet'), API.rpc('my_notifications'),
-                        API.rpc('my_orders'), API.rpc('my_requests'), API.rpc('my_referrals')]))
+                        API.rpc('my_orders'), API.rpc('my_requests'), API.rpc('my_referrals'), API.rpc('my_creator').catch(() => null)]))
       .catch(async e => { if (e.status === 401 || e.status === 403) { API.forgetSession(); return null; } throw e; });
   }
   const [cat, list] = await pub;
   S.catalog = cat; S.listings = list;
   const m = mine ? await mine : null;
-  if (m){ [S.me, S.subs, S.hosting, S.wallet, S.notes, S.orders, S.requests, S.refs] = m; }
-  else { S.me = null; S.subs = []; S.hosting = []; S.wallet = null; S.notes = []; S.orders = []; S.requests = []; S.refs = null; }
+  if (m){ [S.me, S.subs, S.hosting, S.wallet, S.notes, S.orders, S.requests, S.refs, S.creator] = m; }
+  else { S.me = null; S.subs = []; S.hosting = []; S.wallet = null; S.notes = []; S.orders = []; S.requests = []; S.refs = null; S.creator = null; }
 }
 async function refresh(){
   try { await loadAll(); render(); }
@@ -431,7 +450,7 @@ function card(l){
     <p class="muted xs">+ ${naira(l.buyer_fee_kobo)} transaction fee at checkout</p>
     ${seatBar(l.seats_total, l.seats_occupied)}
     <p class="sm ${left === 1 ? 'low' : ''}">${full ? 'Full' : `<b>${left} of ${l.seats_total}</b> seats available`}</p>
-    <div class="meta">${hostTag(l)}<span>${ACCESS[l.access_type].label}</span><span>${l.duration_days} days</span></div>
+    <div class="meta">${hostTag(l)}<span>${ACCESS[l.access_type].label}</span><span>${esc(lensText(l))}</span></div>
     <button class="btn ${full ? '' : 'primary'} block" data-act="join" data-id="${l.id}" ${full ? 'disabled' : ''}>${full ? 'Full' : 'Join seat'}</button>
   </article>`;
 }
@@ -488,39 +507,53 @@ function viewExplore(){
 /* ---------- My Subs ---------- */
 const STATUS_PILL = {COMPLETED:'<span class="pill good">Completed</span>'};
 function subCard(m){
+  const upcoming = ts(m.starts_at) > Date.now();
   const dl = daysLeft(m), total = Math.max(1, Math.round((ts(m.ends_at) - ts(m.starts_at)) / DAY)), pct = Math.min(100, Math.max(3, 100 - dl / total * 100));
   const live = m.status === 'ACTIVE' || m.status === 'DISPUTED';
   const done = m.status === 'ACTIVE' && m.order_status === 'COMPLETED';
-  const pill = done ? STATUS_PILL.COMPLETED : {ACTIVE: dl <= (settings().renewal_window_days || 7) ? `<span class="pill warn">Ends in ${dl} day${dl === 1 ? '' : 's'}</span>` : '<span class="pill good">Active</span>',
+  const until = m.paid_until || m.ends_at, dlUntil = Math.max(0, Math.ceil((ts(until) - Date.now()) / DAY));
+  const pill = upcoming ? `<span class="pill brand">Starts ${fmtShort(m.starts_at)}</span>` : done ? STATUS_PILL.COMPLETED : {ACTIVE: dlUntil <= (settings().renewal_window_days || 7) ? `<span class="pill warn">Ends in ${dlUntil} day${dlUntil === 1 ? '' : 's'}</span>` : '<span class="pill good">Active</span>',
     DISPUTED:'<span class="pill warn">We are helping</span>', COMPLETED:'<span class="pill neutral">Ended</span>', REFUNDED:'<span class="pill bad">Refunded</span>',
-    PARTIALLY_REFUNDED:'<span class="pill neutral">Part refunded</span>'}[m.status];
+    PARTIALLY_REFUNDED:`<span class="pill neutral">${m.moved_to ? 'Moved' : 'Part refunded'}</span>`}[m.status];
   const access = !live ? '' : m.access_type === 'LOGIN' ? '' :
     m.access_status === 'SENT' ? `<p class="sm" style="color:var(--good)">${ic('check')} Host sent your access to ${esc(m.contact)}</p>` :
     `<p class="sm muted">${ic('clock')} Waiting for the host to send access to ${esc(m.contact)}</p>`;
   const d = m.dispute;
   const who = d && d.raised_by_role === 'HOST' ? 'The host' : 'You';
+  const order = m.periods > 1 ? ` · month ${m.period_no} of ${m.periods}` : '';
+  const ahead = live && !upcoming && m.paid_until && ts(m.paid_until) > ts(m.ends_at) + 60000;
+  const mv = m.move;
   return `<div class="card">
-    <div class="row">${tile(m)}<div class="grow"><h3>${esc(m.service)}</h3><p class="muted sm">${esc(m.plan)} · @${esc(m.host_username)}</p></div>${pill}</div>
-    <div class="dates"><div><span>Seat price</span><b class="num">${naira(m.amount_kobo)}</b></div><div><span>Started</span><b>${fmtShort(m.starts_at)}</b></div><div><span>Ends</span><b>${fmtShort(m.ends_at)}</b></div></div>
-    <p class="muted xs">Order <b>${esc(m.txn_ref || '')}</b> · paid ${naira(m.total_kobo)} (incl. ${naira(m.buyer_fee_kobo)} fee)</p>
-    ${live ? `<div class="bar" aria-hidden="true"><i style="width:${pct}%"></i></div><p class="sm muted">${dl} day${dl === 1 ? '' : 's'} remaining${m.renewed ? ' · <b style="color:var(--good)">renewed</b>' : ''}</p>` : ''}
+    <div class="row">${tile(m)}<div class="grow"><h3>${esc(m.service)}</h3><p class="muted sm">${esc(m.plan)} · @${esc(m.host_username)}${order}</p></div>${pill}</div>
+    <div class="dates"><div><span>Seat price</span><b class="num">${naira(m.amount_kobo)}</b></div><div><span>${upcoming ? 'Starts' : 'Started'}</span><b>${fmtShort(m.starts_at)}</b></div><div><span>Ends</span><b>${fmtShort(m.ends_at)}</b></div></div>
+    <p class="muted xs">Order <b>${esc(m.first_txn_ref || m.txn_ref || '')}</b> · paid ${naira(m.periods > 1 ? m.order_total_kobo : m.total_kobo)}${m.periods > 1 ? ` for ${lenWord(m.periods)}` : ''} (incl. ${naira(FEE())} fee)</p>
+    ${live && !upcoming ? `<div class="bar" aria-hidden="true"><i style="width:${pct}%"></i></div><p class="sm muted">${dl} day${dl === 1 ? '' : 's'} remaining${m.renewed && !ahead ? ' · <b style="color:var(--good)">renewed</b>' : ''}</p>` : ''}
+    ${upcoming ? `<p class="sm muted">${ic('clock')} Your seat is reserved. It starts on <b>${fmtDate(m.starts_at)}</b>.</p>` : ''}
+    ${ahead ? `<p class="sm" style="color:var(--good)">${ic('check')} Paid until <b>${fmtDate(m.paid_until)}</b>${m.months_ahead ? ` · ${m.months_ahead} more month${m.months_ahead === 1 ? '' : 's'} paid` : ''}</p>` : ''}
     ${access}
+    ${mv ? `<div class="ask"><span><b>SplitSub is moving your seat to ${esc(mv.service)} · ${esc(mv.plan)}</b> (host @${esc(mv.host)}). It costs about ${naira(mv.difference_kobo)} more for the time you have left. Your current seat keeps working until you pay.${mv.note ? ' Note: ' + esc(mv.note) : ''}</span>
+      <div class="pair"><button class="btn primary sm" data-act="payMove" data-id="${mv.id}">Pay and move</button><button class="btn line sm" data-act="declineMove" data-id="${mv.id}">Keep my seat</button></div></div>` : ''}
+    ${live && m.host_stopping ? `<p class="tip warn">Your host is not renewing this plan. Your seat ends on <b>${fmtDate(until)}</b>. Months that had not started were refunded to your wallet.</p>` : ''}
+    ${live && m.ask_renew && !m.host_stopping ? `<div class="ask"><span><b>Your seat ends on ${fmtDate(until)}.</b> Will you renew it?</span>
+      <div class="pair"><button class="btn primary sm" data-act="renewSheet" data-id="${m.id}">I will renew</button><button class="btn line sm" data-act="noRenew" data-id="${m.id}">I won't renew</button></div></div>` : ''}
+    ${live && m.renew_choice === 'NO' ? `<p class="tip">You chose not to renew. Your seat ends on <b>${fmtDate(until)}</b>. <button class="link" data-act="undoNoRenew" data-id="${m.id}">I changed my mind</button></p>` : ''}
+    ${live && m.status === 'ACTIVE' && !m.host_stopping && m.tip_id ? `<label class="switch"><input type="checkbox" data-act2="autorenew" data-id="${m.id}" ${m.auto_renew ? 'checked' : ''}><span><b>Auto-renew my seat from my wallet balance when it expires</b><br><span class="muted xs">We renew it for ${lenWord(m.periods || 1)} when it ends, if your wallet has ${m.renew_price_kobo ? naira(m.renew_price_kobo * (m.periods || 1) + FEE()) : 'enough money'}. We remind you ${settings().reminder_days || 3} days before.</span></span></label>` : ''}
     ${d && (d.status === 'OPEN' || d.status === 'IN_REVIEW') ? `<p class="tip">${who} reported a problem and our team is on it. Report status: <b>${d.status === 'OPEN' ? 'Open' : 'In review'}</b>. We'll notify you when it's sorted.</p>` : ''}
     ${d && d.resolution ? `<p class="tip">The report was resolved${d.resolution === 'REFUND' ? ' with a full refund' : d.resolution === 'PARTIAL_REFUND' ? ' with a partial refund' : ''}.</p>` : ''}
     <div class="wrap-row">
       ${live ? `<button class="btn soft sm" data-act="access" data-id="${m.listing_id}">${ic('lock')} Access</button>` : ''}
       <button class="btn soft sm" data-act="chat" data-id="${m.id}">${ic('chat')} Chat${m.unread ? `<span class="badge-n">${m.unread}</span>` : ''}</button>
-      <button class="btn line sm" data-act="receipt" data-id="${esc(m.txn_ref || '')}">Receipt</button>
-      ${m.can_complete ? `<button class="btn primary sm" data-act="complete" data-id="${m.id}">Mark completed</button>` : ''}
-      ${m.can_renew ? `<button class="btn primary sm" data-act="renew" data-id="${m.id}" data-price="${m.renew_price_kobo}">Renew · ${naira(m.renew_price_kobo + FEE())}</button>` : ''}
-      ${m.status === 'ACTIVE' ? `<button class="btn danger sm" data-act="report" data-id="${m.id}">${ic('bell')} Report a problem</button>` : ''}
+      <button class="btn line sm" data-act="receipt" data-id="${esc(m.first_txn_ref || m.txn_ref || '')}">Receipt</button>
+      ${m.can_complete && !upcoming ? `<button class="btn primary sm" data-act="complete" data-id="${m.id}">Mark completed</button>` : ''}
+      ${m.can_renew && !m.ask_renew ? `<button class="btn primary sm" data-act="renewSheet" data-id="${m.id}">Renew</button>` : ''}
+      ${m.status === 'ACTIVE' && !upcoming ? `<button class="btn danger sm" data-act="report" data-id="${m.id}">${ic('bell')} Report a problem</button>` : ''}
     </div>
   </div>`;
 }
 function hostCard(l){
   const st = {DRAFT:'<span class="pill neutral">Draft</span>', PENDING_REVIEW:'<span class="pill warn">In review</span>', LIVE:'<span class="pill good">Live</span>',
     PAUSED:'<span class="pill neutral">Paused</span>', REJECTED:'<span class="pill bad">Needs changes</span>', SUSPENDED:'<span class="pill bad">Suspended</span>', EXPIRED:'<span class="pill neutral">Expired</span>'}[l.status];
-  const waiting = l.members.filter(m => (m.status === 'ACTIVE' || m.status === 'DISPUTED') && m.access_status === 'WAITING').length;
+  const waiting = new Set(l.members.filter(m => (m.status === 'ACTIVE' || m.status === 'DISPUTED') && m.access_status === 'WAITING').map(m => m.buyer_username)).size;
   const openReports = l.disputes.filter(d => d.status === 'OPEN' || d.status === 'IN_REVIEW').length;
   return `<div class="card">
     <div class="row">${tile(l)}<div class="grow"><h3>${esc(l.service)}</h3><p class="muted sm">${esc(l.plan)} · ${l.markup_pct}% markup</p></div>${st}</div>
@@ -533,8 +566,17 @@ function hostCard(l){
     ${l.proof_status === 'PENDING' ? `<p class="tip">${ic('clock')} Your proof of purchase is waiting for admin approval. The listing goes live only after it is approved.</p>` : ''}
     ${l.proof_status === 'REJECTED' ? `<p class="tip warn">Proof rejected${l.proof_reason ? ': ' + esc(l.proof_reason) : ''}. Upload a new one and resubmit.</p>` : ''}
     ${l.members.reduce((a, m) => a + (m.unread || 0), 0) ? `<p class="tip">${l.members.reduce((a, m) => a + (m.unread || 0), 0)} unread order message(s).</p>` : ''}
+    ${hostRenewHTML(l)}
     <div class="wrap-row"><button class="btn primary sm" data-act="manage" data-id="${l.id}">${ic('edit')} ${l.status === 'DRAFT' || l.status === 'REJECTED' ? 'Finish & submit' : 'Manage'}</button>${l.status === 'LIVE' ? `<button class="btn line sm" data-act="share" data-id="${l.id}">${ic('share')} Share link</button>` : ''}</div>
   </div>`;
+}
+function hostRenewHTML(l){
+  if (!['LIVE','PAUSED'].includes(l.status) || !l.host_paid_until) return '';
+  if (l.host_stopping) return `<div class="ask"><span><b>You chose not to renew this plan.</b> New members can't join. Members who already paid keep their seats until their month ends.</span><button class="btn line sm" data-act="hostRenew" data-id="${l.id}" data-v="1">I changed my mind: I will renew</button></div>`;
+  if (l.renew_paused) return `<div class="ask"><span><b>Paused: please confirm your plan.</b> You didn't confirm that your ${esc(l.service)} plan continues, so new members can't join.</span><button class="btn primary sm" data-act="hostRenew" data-id="${l.id}" data-v="1">I will renew my plan</button></div>`;
+  if (l.ask_renew) return `<div class="ask"><span><b>Will you renew your ${esc(l.service)} plan?</b> It is confirmed until ${fmtDate(l.host_paid_until)}. Members need to know it continues.</span>
+    <div class="pair"><button class="btn primary sm" data-act="hostRenew" data-id="${l.id}" data-v="1">I will renew</button><button class="btn line sm" data-act="hostNoRenew" data-id="${l.id}">I won't renew</button></div></div>`;
+  return `<p class="muted xs">${ic('check')} Plan confirmed until ${fmtDate(l.host_paid_until)}. We'll ask you ${settings().host_reminder_days || 5} days before.</p>`;
 }
 function signInPrompt(title, text){
   return `<div class="empty" style="margin-top:12px"><b>${title}</b><span>${text}</span><button class="btn primary" data-act="auth">Sign in or create account</button></div>`;
@@ -549,8 +591,12 @@ function ordersHTML(){
 function viewMySubs(){
   if (!S.me) return `<div class="ptitle"><h1>My Subs</h1></div>${signInPrompt('Your subscriptions live here', 'Sign in to see the seats you joined and the plans you share.')}`;
   const win = settings().renewal_window_days || 7;
-  const current = S.subs.filter(m => (m.status === 'ACTIVE' || m.status === 'DISPUTED') && ts(m.starts_at) <= Date.now());
-  const expiring = current.filter(m => m.status === 'ACTIVE' && daysLeft(m) <= win && !m.renewed);
+  const liveAll = S.subs.filter(m => m.status === 'ACTIVE' || m.status === 'DISPUTED');
+  const started = liveAll.filter(m => ts(m.starts_at) <= Date.now());
+  // a seat bought to start on a later day shows once (its first month) until it starts
+  const upcoming = liveAll.filter(m => ts(m.starts_at) > Date.now() && !liveAll.some(x => x.listing_id === m.listing_id && ts(x.starts_at) < ts(m.starts_at)));
+  const current = started.concat(upcoming);
+  const expiring = current.filter(m => m.status === 'ACTIVE' && (m.can_renew || m.ask_renew) && m.renew_choice !== 'NO' && m.paid_until && Math.ceil((ts(m.paid_until) - Date.now()) / DAY) <= win);
   const past = S.subs.filter(m => !(m.status === 'ACTIVE' || m.status === 'DISPUTED'));
   const tabs = [['active','Active',current.length],['expiring','Expiring soon',expiring.length],['past','Past',past.length],['orders','Orders & chats',S.orders.length],['hosting','Shared by me',S.hosting.length]];
   const list = {active:current, expiring, past}[UI.subs];
@@ -627,6 +673,7 @@ function viewAccount(){
     <button data-act="notes">${ic('bell')}<span class="grow">Notifications</span>${S.me.unread ? `<span class="pill bad">${S.me.unread}</span>` : ''}</button>
     <button data-act="requests">${ic('search')}<span class="grow">Subscription requests</span><span class="muted sm">${S.requests.length}</span></button>
   </div>
+  ${creatorHTML()}
   ${S.refs ? `<div class="card"><h3>Invite friends</h3>
     <p class="sm muted">Share your code. When a friend signs up with it and makes a first purchase, you both can earn rewards while a promotion is running.</p>
     <div class="kv"><div><span>Your code</span><b>${esc(S.refs.code)}</b></div><div><span>Friends invited</span><b>${S.refs.invited}</b></div><div><span>Rewarded</span><b>${S.refs.rewarded} · ${naira(S.refs.earned_kobo)}</b></div></div>
@@ -645,6 +692,22 @@ function viewAccount(){
   <div class="sec-head"><h2>Help</h2></div>${faq}
   <div class="menu"><button data-act="password">${ic('lock')}<span class="grow">Change password</span></button><button data-act="signout">${ic('out')}<span class="grow">Sign out</span></button></div>
   ${foot()}`;
+}
+const creatorLink = () => S.creator ? location.origin + '/' + S.creator.link_slug : '';
+function creatorHTML(){
+  const c = S.creator; if (!c) return '';
+  const rule = c.commission_type === 'PERCENT' ? `${(c.commission_bps / 100).toFixed(2).replace(/\.?0+$/, '')}% of every seat your people buy` : `${naira(c.commission_flat_kobo)} for every order your people make`;
+  return `<div class="card"><div class="row between"><h3>Creator dashboard</h3>${c.active ? '<span class="pill good">Active</span>' : '<span class="pill neutral">Paused</span>'}</div>
+    <div class="kv"><div><span>Your code</span><b>${esc(c.code)}</b></div><div><span>Your link</span><b style="word-break:break-all">${esc(creatorLink().replace(/^https?:\/\//, ''))}</b></div>
+      <div><span>You earn</span><b>${esc(rule)}${c.first_purchase_only ? ' (first order only)' : ''}</b></div>
+      <div><span>Signed up with your code</span><b>${c.signups}</b></div><div><span>Bought a seat</span><b>${c.buyers}</b></div>
+      <div><span>Waiting (escrow)</span><b class="num">${money(c.pending_kobo)}</b></div><div><span>Ready for month-end payout</span><b class="num">${money(c.payable_kobo)}</b></div>
+      <div><span>Paid to you</span><b class="num">${money(c.paid_kobo)}</b></div>${c.bank ? `<div><span>Payout account</span><b>${esc(c.bank)}</b></div>` : ''}</div>
+    <p class="muted xs">Earnings become ready when the host's 30-day escrow for that seat ends. SplitSub pays creators at the end of each month.</p>
+    <div class="wrap-row"><button class="btn primary sm" data-act="shareCreator">${ic('share')} Share my link</button><button class="btn line sm" data-act="copy" data-v="${esc(creatorLink())}">${ic('copy')} Copy link</button><button class="btn line sm" data-act="copy" data-v="${esc(c.code)}">${ic('copy')} Copy code</button></div>
+    ${(c.recent || []).length ? `<details><summary class="sm">Recent sign-ups (${c.recent.length})</summary><div class="rows-list">${c.recent.map(r => `<div><span class="grow sm">@${esc(r.who)}<br><span class="muted xs">${fmtDate(r.joined_at)}</span></span>${r.bought ? '<span class="pill good">Bought</span>' : '<span class="pill neutral">Signed up</span>'}</div>`).join('')}</div></details>` : ''}
+    ${(c.payouts || []).length ? `<details><summary class="sm">Payouts (${c.payouts.length})</summary><div class="rows-list">${c.payouts.map(p => `<div><span class="grow sm">${esc(p.period)}<br><span class="muted xs">${p.status === 'PAID' ? (p.method === 'WALLET' ? 'to your wallet' : 'to your bank') + ' · ' + fmtDate(p.paid_at) : 'being paid'}</span></span><b class="num">${naira(p.amount_kobo)}</b></div>`).join('')}</div></details>` : ''}
+  </div>`;
 }
 const VIEWS = {explore:viewExplore, mysubs:viewMySubs, wallet:viewWallet, account:viewAccount};
 
@@ -676,7 +739,7 @@ async function detailSheet(id){
     <div class="info">
       <div>${ic(a.icon)}<span class="grow"><b>${a.label}</b><span>${a.how}</span></span></div>
       <div>${ic('user')}<span class="grow"><b>Hosted by @${esc(l.host_username)}</b><span>${l.host_verified ? 'Verified host' : 'Host'}${l.host_name ? ' · ' + esc(l.host_name) : ''}</span></span></div>
-      <div>${ic('clock')}<span class="grow"><b>${l.duration_days} days</b><span>You can renew in My Subs near the end.</span></span></div>
+      <div>${ic('clock')}<span class="grow"><b>Pay for ${esc(lensText(l))}</b><span>Pick the length and the day it starts. The host is paid one month at a time, so unused months can always be refunded. Renew or turn on auto-renew in My Subs.</span></span></div>
       ${l.note ? `<div>${ic('chat')}<span class="grow"><b>Note from the host</b><span>${esc(l.note)}</span></span></div>` : ''}
       ${l.sharing_rules ? `<div>${ic('shield')}<span class="grow"><b>How ${esc(l.service)} sharing works</b><span>${esc(l.sharing_rules)}</span></span></div>` : ''}
     </div>
@@ -684,6 +747,8 @@ async function detailSheet(id){
     <div class="two"><button class="btn line" data-act="share" data-id="${l.id}">${ic('share')} Share this plan</button><button class="btn line" data-act="copy" data-v="${esc(planUrl(l.id))}">${ic('copy')} Copy link</button></div>`);
 }
 
+/* ---- Buying a seat: length (1/3/6/12 months) + start date ---- */
+let J = null;
 async function confirmSheet(id){
   if (needAuth()) return;
   let l;
@@ -692,26 +757,41 @@ async function confirmSheet(id){
   if (v.is_host){ toast('This is your own plan.'); return; }
   if (v.is_member){ toast('You already have a seat in this plan.'); return; }
   if (l.seats_available <= 0){ toast('Sorry, this plan is full.'); return; }
-  const enough = v.wallet_kobo >= l.total_kobo;
+  const lens = (l.allowed_months || [1]).slice().sort((x, y) => x - y);
+  J = {l, wallet:v.wallet_kobo || 0, months:lens[0], start:lagosToday()};
   const contact = needsContact(l.access_type)
     ? `<div class="field"><label for="j-contact">${a.ask}</label><input id="j-contact" ${l.access_type === 'DATA' ? 'inputmode="tel" placeholder="0803 123 4567"' : 'type="email" inputmode="email" placeholder="you@gmail.com"'} value="${esc(l.access_type === 'DATA' ? S.me.profile.phone : S.me.profile.email)}"><small>Only the host sees this, to give you access.</small></div>` : '';
   openSheet('Confirm your seat', `
-    <div class="kv">
-      <div><span>Service</span><b>${esc(l.service)} · ${esc(l.plan)}</b></div>
-      <div><span>Price</span><b class="num">${naira(l.seat_kobo)}${per(l.duration_days)}</b></div>
-      <div><span>Duration</span><b>${l.duration_days} days</b></div>
-      <div><span>Access</span><b>${a.label}</b></div>
-      <div><span>Host</span><b>@${esc(l.host_username)}${l.host_verified ? ' ✓' : ''}</b></div>
-      <div><span>Available seats</span><b>${l.seats_available}</b></div>
-      <div><span>Transaction fee</span><b class="num">${naira(l.buyer_fee_kobo)}</b></div>
-      <div class="total"><span>Total to pay</span><b class="num">${naira(l.total_kobo)}</b></div>
-    </div>
+    <div class="row">${tile(l)}<div class="grow"><h3>${esc(l.service)}</h3><p class="muted sm">${esc(l.plan)} · @${esc(l.host_username)}${l.host_verified ? ' ✓' : ''} · ${a.label} · ${l.seats_available} of ${l.seats_total} available seats</p></div></div>
+    ${lens.length > 1 ? `<div class="field"><span class="lbl2">How long?</span><div class="chips lens">${lens.map(n => `<button type="button" class="chip len" data-act="jlen" data-v="${n}" aria-pressed="${n === J.months}"><b>${lenName(n, l.duration_days)}</b><small>${naira(l.seat_kobo * n)}</small></button>`).join('')}</div></div>` : ''}
+    <div class="pair"><div class="field"><label for="j-start">Start date</label><input id="j-start" type="date" min="${lagosToday()}" max="${lagosPlus(30)}" value="${J.start}"></div>
+      <div class="field"><span class="lbl2">Ends on</span><b class="dateout" id="j-end"></b></div></div>
+    <div class="kv" id="j-sum"></div>
     ${contact}
-    ${enough
-      ? `<button class="btn primary block" data-act="payWallet" data-id="${l.id}">Confirm & Pay ${naira(l.total_kobo)}</button><p class="muted xs" style="text-align:center">Paid from your wallet (${naira(v.wallet_kobo)})</p>`
-      : `<button class="btn primary block" data-act="payCard" data-id="${l.id}">Confirm & Pay ${naira(l.total_kobo)}</button><p class="muted xs" style="text-align:center">You'll pay securely online: card, bank transfer or USSD.</p>`}
-    <p class="muted xs" style="text-align:center">A ${naira(l.buyer_fee_kobo)} transaction fee is added to every purchase. You get a receipt and an order chat with the host.</p>
+    <div id="j-pay" style="display:grid;gap:10px"></div>
+    <p class="muted xs" style="text-align:center">You can start today or on any day in the next 30 days. Your seat is held from today.${lens.length > 1 ? ' For more than one month, the host is paid one month at a time, so months that have not started can be refunded if anything goes wrong.' : ''}</p>
     <p class="muted xs" style="text-align:center">By joining you agree to use only your own seat and follow the host's note.</p>`);
+  jSync();
+}
+function jSync(){
+  if (!J || !$('#j-sum')) return;
+  const l = J.l, n = J.months, days = n * l.duration_days, fee = l.buyer_fee_kobo, total = l.seat_kobo * n + fee;
+  const st = startAt(J.start), end = new Date(st.getTime() + days * DAY);
+  $('#j-end').textContent = fmtDate(end);
+  $('#j-sum').innerHTML = `<div><span>Price</span><b class="num">${naira(l.seat_kobo)}${per(l.duration_days)}</b></div>
+    <div><span>Length</span><b>${lenWord(n)} · ${days} days</b></div>
+    <div><span>Starts</span><b>${J.start <= lagosToday() ? 'Today' : fmtDate(st)}</b></div>
+    ${n > 1 ? `<div><span>Seat (${n} × ${naira(l.seat_kobo)})</span><b class="num">${naira(l.seat_kobo * n)}</b></div>` : ''}
+    <div><span>Transaction fee (once)</span><b class="num">${naira(fee)}</b></div>
+    <div class="total"><span>Total to pay</span><b class="num">${naira(total)}</b></div>`;
+  const short = total - J.wallet, s = settings();
+  $('#j-pay').innerHTML = short <= 0
+    ? `<button class="btn primary block" data-act="payWallet" data-id="${l.id}">Confirm & Pay ${naira(total)}</button><p class="muted xs" style="text-align:center">Paid from your wallet (${naira(J.wallet)})</p>`
+    : cardOn()
+      ? `<button class="btn primary block" data-act="payCard" data-id="${l.id}">Confirm & Pay ${naira(total)}</button><p class="muted xs" style="text-align:center">You'll pay securely online: card, bank transfer or USSD.</p>`
+      : s.manual_funding
+        ? `<p class="tip warn">Card payments are paused right now. Add ${naira(short)} to your wallet by bank transfer, then come back to join.</p><button class="btn primary block" data-act="fundNeed" data-v="${short}">${ic('wallet')} Add ${naira(short)} by bank transfer</button>`
+        : `<p class="tip warn">Adding money is paused right now. Please message support and we will help you.</p><button class="btn line block" data-act="tickets">${ic('chat')} Message support</button>`;
 }
 
 async function accessSheet(lid){
@@ -960,7 +1040,7 @@ async function manageSheet(id){
     <div class="sec-head"><h2 style="font-size:18px">Members</h2></div>
     ${live.length ? `<div class="rows-list">${live.map(m => `<div><span class="grow"><b class="sm">@${esc(m.buyer_username)}${m.buyer_name ? ' · ' + esc(m.buyer_name) : ''}</b>
         ${m.contact ? `<br><span class="xs" style="color:var(--brand-strong);font-weight:700">${esc(m.contact)}</span>` : ''}
-        <br><span class="muted xs">Order ${esc(m.txn_ref || '')} · until ${fmtShort(m.ends_at)} · you earn ${naira(m.host_kobo)}${m.escrow === 'HELD' ? ' · available ' + fmtDate(m.release_at) : ''}</span></span>
+        <br><span class="muted xs">Order ${esc(m.txn_ref || '')}${m.periods > 1 ? ` · month ${m.period_no} of ${m.periods}` : ''} · ${ts(m.starts_at) > Date.now() ? 'starts ' + fmtShort(m.starts_at) + ' · ' : ''}until ${fmtShort(m.ends_at)} · you earn ${naira(m.host_kobo)}${m.escrow === 'HELD' ? ' · available ' + fmtDate(m.release_at) : ''}${!m.renewed && m.auto_renew ? ' · auto-renew on' : ''}${!m.renewed && m.renew_choice === 'NO' ? ' · will not renew' : ''}</span></span>
         <span style="display:grid;gap:6px;justify-items:end"><button class="btn soft sm" data-act="chat" data-id="${m.id}">${ic('chat')}${m.unread ? `<span class="badge-n">${m.unread}</span>` : ''}</button>
         ${l.access_type !== 'LOGIN' && m.access_status === 'WAITING' ? `<button class="btn primary sm" data-act="sent" data-id="${m.id}">Mark sent</button>` : m.status === 'DISPUTED' ? '<span class="pill warn">Reported</span>' : m.order_status === 'COMPLETED' ? '<span class="pill good">Completed</span>' : '<span class="pill good">OK</span>'}</span></div>`).join('')}</div>`
       : '<p class="muted sm">No members yet.</p>'}
@@ -1025,16 +1105,19 @@ function codeCooldown(sec){
 }
 async function fundSheet(preKobo){
   if (needAuth()) return;
-  const s = settings(), manual = !!s.manual_funding;
+  const s = settings(), manual = !!s.manual_funding, card = cardOn();
+  if (!card && !manual){ openSheet('Add money', `<p class="tip warn">Adding money is paused right now. Please message support and we will help you.</p><button class="btn primary block" data-act="tickets">${ic('chat')} Message support</button>`); return; }
   let open = [];
   if (manual){ try { open = ((await API.rpc('my_manual_deposits')).items || []).filter(x => x.status === 'PENDING' || x.status === 'SENT'); } catch(e){ /* ignore */ } }
   openSheet('Add money', `<form class="form" id="f-fund" novalidate>
     ${open.length ? `<div class="tip warn">You have a bank transfer waiting: ${open.map(x => `<button type="button" class="chip" data-act="mdOpen" data-id="${x.id}">${naira(x.amount_kobo)} · ${x.status === 'SENT' ? 'checking' : 'not sent yet'}</button>`).join(' ')}</div>` : ''}
     <div class="field"><label for="f-amt">Amount (₦)</label><input id="f-amt" inputmode="numeric" value="${preKobo ? Math.ceil(preKobo / 100) : 5000}"><small>Between ${naira(s.min_topup_kobo)} and ${naira(s.max_topup_kobo)}. No fee on deposits.</small></div>
     <div class="chips">${[1000, 2000, 5000, 10000, 20000].map(a => `<button type="button" class="chip" data-act="famt" data-v="${a}">${naira(a * 100)}</button>`).join('')}</div>
-    <p class="tip">Pay online with your card, bank transfer or USSD. Your money is added to your wallet as soon as the payment is confirmed.</p>
+    ${card ? `<p class="tip">Pay online with your card, bank transfer or USSD. Your money is added to your wallet as soon as the payment is confirmed.</p>
     <button class="btn primary block" type="submit">Continue to payment</button>
-    ${manual ? `<p class="muted xs" style="text-align:center">Prefer to send the money yourself?</p><button class="btn line block" type="button" data-act="mdStart">${ic('wallet')} Pay by bank transfer instead</button>` : ''}</form>`);
+    ${manual ? `<p class="muted xs" style="text-align:center">Prefer to send the money yourself?</p><button class="btn line block" type="button" data-act="mdStart">${ic('wallet')} Pay by bank transfer instead</button>` : ''}`
+    : `<p class="tip">Send the money from your bank app to our account. We add it to your wallet as soon as we confirm it.</p>
+    <button class="btn primary block" type="button" data-act="mdStart">${ic('wallet')} Pay by bank transfer</button>`}</form>`);
 }
 
 /* ---- Manual bank transfer ---- */
@@ -1091,6 +1174,51 @@ async function mdSupportSheet(id){
     <button class="btn primary block" type="submit">Send to support</button></form>`);
 }
 function planUrl(id){ return location.origin + location.pathname + '?plan=' + id; }
+/* ---- Renewing a seat (choose 1/3/6/12 months) ---- */
+let RN = null;
+function renewSheet(id){
+  const m = S.subs.find(x => x.id === id); if (!m) return;
+  if (!m.renew_price_kobo){ toast('The host has paused this plan, so it cannot be renewed right now.'); return; }
+  const lens = (m.allowed_months || [1]).slice().sort((x, y) => x - y);
+  RN = {m, months:lens.includes(m.periods) ? m.periods : lens[0]};
+  openSheet('Renew your seat', `<div class="row">${tile(m)}<div class="grow"><h3>${esc(m.service)}</h3><p class="muted sm">${esc(m.plan)} · @${esc(m.host_username)}</p></div></div>
+    ${lens.length > 1 ? `<div class="field"><span class="lbl2">Renew for</span><div class="chips lens">${lens.map(n => `<button type="button" class="chip len" data-act="rnlen" data-v="${n}" aria-pressed="${n === RN.months}"><b>${lenName(n, m.duration_days)}</b><small>${naira(m.renew_price_kobo * n)}</small></button>`).join('')}</div></div>` : ''}
+    <div class="kv" id="rn-sum"></div><div id="rn-pay" style="display:grid;gap:10px"></div>
+    <p class="muted xs" style="text-align:center">The new period starts the moment your current one ends, so you lose no days.</p>`);
+  rnSync();
+}
+function rnSync(){
+  if (!RN || !$('#rn-sum')) return;
+  const m = RN.m, n = RN.months, total = m.renew_price_kobo * n + FEE(), from = new Date(Math.max(ts(m.paid_until || m.ends_at), Date.now()));
+  const to = new Date(from.getTime() + n * (m.duration_days || 30) * DAY), w = bal().wallet_kobo || 0, short = total - w, st = settings();
+  $('#rn-sum').innerHTML = `<div><span>New period</span><b>${fmtDate(from)} – ${fmtDate(to)}</b></div><div><span>Seat (${n} × ${naira(m.renew_price_kobo)})</span><b class="num">${naira(m.renew_price_kobo * n)}</b></div>
+    <div><span>Transaction fee</span><b class="num">${naira(FEE())}</b></div><div class="total"><span>Total</span><b class="num">${naira(total)}</b></div>`;
+  $('#rn-pay').innerHTML = short <= 0
+    ? `<button class="btn primary block" data-act="renewNow" data-id="${m.tip_id || m.id}">Renew · pay ${naira(total)} from wallet</button><p class="muted xs" style="text-align:center">Wallet: ${naira(w)}</p>`
+    : (cardOn() || st.manual_funding)
+      ? `<p class="tip">Add ${naira(short)} to your wallet first (you have ${naira(w)}).</p><button class="btn primary block" data-act="fundNeed" data-v="${short}">${ic('plus')} Add ${naira(short)}</button>`
+      : `<p class="tip warn">Adding money is paused right now. Please message support.</p>`;
+}
+function hostNoRenewSheet(id){
+  const l = S.hosting.find(x => x.id === id); if (!l) return;
+  const members = new Set(l.members.filter(m => (m.status === 'ACTIVE' || m.status === 'DISPUTED') && ts(m.ends_at) > Date.now()).map(m => m.buyer_username)).size;
+  openSheet("Not renewing?", `<p class="muted">If you won't renew your <b>${esc(l.service)} · ${esc(l.plan)}</b> plan after <b>${fmtDate(l.host_paid_until)}</b>:</p>
+    <div class="info"><div>${ic('lock')}<span class="grow"><b>No new members</b><span>The listing stops taking new members and renewals now.</span></span></div>
+    <div>${ic('users')}<span class="grow"><b>Current members keep their seat</b><span>${members} member${members === 1 ? '' : 's'} who already paid keep access until their month ends. Please keep the plan working until then.</span></span></div>
+    <div>${ic('wallet')}<span class="grow"><b>Later months are refunded</b><span>Months members paid for that start after ${fmtDate(l.host_paid_until)} go back to their wallets.</span></span></div></div>
+    <button class="btn danger block" data-act="hostRenew" data-id="${l.id}" data-v="0">Yes, I won't renew</button>
+    <button class="btn line block" data-act="close">Go back</button>`);
+}
+async function payMoveSheet(id){
+  let q; try { q = await API.rpc('seat_move_quote', {p_move:id}); } catch(e){ toast(e.message); return; }
+  const w = bal().wallet_kobo || 0, short = q.difference_kobo - w, st = settings();
+  openSheet('Move your seat', `<p class="muted">SplitSub is moving your seat to <b>${esc(q.service)} · ${esc(q.plan)}</b> with @${esc(q.host)}, until ${fmtDate(q.ends_at)}.</p>
+    <div class="kv"><div><span>Unused part of your seat</span><b class="num">${naira(q.credit_kobo)}</b></div><div><span>New plan for the same days</span><b class="num">${naira(q.cost_kobo)}</b></div>
+    <div class="total"><span>You pay the difference</span><b class="num">${naira(q.difference_kobo)}</b></div></div>
+    ${short <= 0 ? `<button class="btn primary block" data-act="payMoveNow" data-id="${id}">Pay ${naira(q.difference_kobo)} and move</button><p class="muted xs" style="text-align:center">Paid from your wallet (${naira(w)}). Your balance never goes below ₦0.</p>`
+      : (cardOn() || st.manual_funding) ? `<p class="tip">Add ${naira(short)} to your wallet first (you have ${naira(w)}).</p><button class="btn primary block" data-act="fundNeed" data-v="${short}">${ic('plus')} Add ${naira(short)}</button>`
+      : `<p class="tip warn">Adding money is paused right now. Please message support.</p>`}`);
+}
 function partnerSheet(){
   const p = S.me ? S.me.profile : {};
   openSheet('Collaborate or invest', `<form class="form" id="f-partner" novalidate>
@@ -1225,16 +1353,34 @@ document.addEventListener('click', async e => {
     case 'open': if (!e.target.closest('button')) detailSheet(id); break;
     case 'join': confirmSheet(id); break;
     case 'payWallet': {
-      const c = $('#j-contact');
-      const r = await run(el, () => API.rpc('join_with_wallet', {p_listing:id, p_contact:c ? c.value.trim() : ''}));
-      if (r){ const l = S.listings.find(x => x.id === id) || {}; await accessSheet(id); toast(`You joined ${l.service || 'the plan'}!`); }
+      const c = $('#j-contact'), mo = J ? J.months : 1, sd = J ? J.start : lagosToday();
+      const r = await run(el, () => API.rpc('join_with_wallet', {p_listing:id, p_contact:c ? c.value.trim() : '', p_months:mo, p_start:sd}));
+      if (r){ const l = S.listings.find(x => x.id === id) || {}; await accessSheet(id); toast(`You joined ${l.service || 'the plan'} for ${lenWord(mo)}!`); }
       break; }
-    case 'payCard': { const c = $('#j-contact'); startPay(el, {purpose:'SEAT', listing_id:id, contact:c ? c.value.trim() : ''}); break; }
+    case 'payCard': { const c = $('#j-contact'); startPay(el, {purpose:'SEAT', listing_id:id, contact:c ? c.value.trim() : '', months:J ? J.months : 1, start_date:J ? J.start : lagosToday()}); break; }
+    case 'jlen': if (J){ J.months = +v; el.parentElement.querySelectorAll('.chip').forEach(c => c.setAttribute('aria-pressed', c === el)); jSync(); } break;
+    case 'rnlen': if (RN){ RN.months = +v; el.parentElement.querySelectorAll('.chip').forEach(c => c.setAttribute('aria-pressed', c === el)); rnSync(); } break;
+    case 'fundNeed': fundSheet(+v); break;
+    case 'renewSheet': renewSheet(id); break;
+    case 'renewNow': if (await run(el, () => API.rpc('renew_membership', {p_id:id, p_months:RN ? RN.months : 1}), 'Renewed. Your next period starts when this one ends.')) closeSheet(); break;
+    case 'noRenew': if (!confirm("You won't renew this seat? It ends on its end date and then opens for someone else.")) break;
+      run(el, () => API.rpc('member_renew_choice', {p_membership:id, p_choice:'NO'}), 'Got it. Your seat ends on its end date.'); break;
+    case 'undoNoRenew': run(el, () => API.rpc('member_renew_choice', {p_membership:id, p_choice:'YES'}), 'Great. Tap Renew or turn on auto-renew to keep your seat.'); break;
+    case 'hostRenew': {
+      const yes = v === '1';
+      const r = await run(el, () => API.rpc('host_renew_answer', {p_listing:id, p_yes:yes}), yes ? 'Thanks! Your plan is confirmed for another month.' : 'Noted. No new members can join; members were told.');
+      if (r) closeSheet(); break; }
+    case 'hostNoRenew': hostNoRenewSheet(id); break;
+    case 'payMove': payMoveSheet(id); break;
+    case 'payMoveNow': if (await run(el, () => API.rpc('complete_seat_move', {p_move:id}), 'Done! Your seat was moved.')){ closeSheet(); UI.subs = 'active'; go('mysubs'); } break;
+    case 'declineMove': if (!confirm('Keep your current seat and cancel the move?')) break;
+      run(el, () => API.rpc('decline_seat_move', {p_move:id}), 'OK. You keep your current seat.'); break;
+    case 'shareCreator': {
+      const url = creatorLink(), text = `Split premium subscriptions on ${settings().site_name} and pay only for your seat. Join with my code ${S.creator.code}:`;
+      if (navigator.share){ try { await navigator.share({title:settings().site_name, text, url}); break; } catch(err){ if (err.name === 'AbortError') break; } }
+      copyText(url); break; }
     case 'access': accessSheet(id); break;
-    case 'renew': {
-      const price = +el.dataset.price + FEE();
-      if (bal().wallet_kobo < price){ fundSheet(price - bal().wallet_kobo); toast(`Add ${naira(price - bal().wallet_kobo)} to renew (includes the ${naira(FEE())} fee).`); break; }
-      run(el, () => API.rpc('renew_membership', {p_id:id}), 'Renewed. Your next period starts when this one ends.'); break; }
+    case 'renew': renewSheet(id); break;
     case 'report': reportSheet(id, !!el.dataset.chat); break;
     case 'create': createSheet(); break;
     case 'hsvc': H.service = id; H.plan = null; renderCreate(); break;
@@ -1301,7 +1447,13 @@ document.addEventListener('input', e => {
   if (e.target.id === 'fc-buy' || e.target.id === 'fc-wd') calcFees();
   if (e.target.id === 'q'){ UI.q = e.target.value; clearTimeout(window.__sq); window.__sq = setTimeout(() => { const t = UI.q.trim(); if (t.length > 1) API.rpc('log_search', {p_term:t, p_results:filtered().length}).catch(() => {}); }, 1500); const items = filtered(); $('#feed').innerHTML = feedHTML(items); $('#count').textContent = `${items.length} plan${items.length === 1 ? '' : 's'}`; }
 });
-document.addEventListener('change', e => {
+document.addEventListener('change', async e => {
+  if (e.target.id === 'j-start' && J){ const v = e.target.value; J.start = !v || v < lagosToday() ? lagosToday() : v > lagosPlus(30) ? lagosPlus(30) : v; e.target.value = J.start; jSync(); }
+  if (e.target.dataset && e.target.dataset.act2 === 'autorenew'){
+    const on = e.target.checked, box = e.target; box.disabled = true;
+    try { await API.rpc('set_auto_renew', {p_membership:box.dataset.id, p_on:on}); await loadAll(); render(); toast(on ? 'Auto-renew is on. Keep enough money in your wallet.' : 'Auto-renew is off.'); }
+    catch(err){ box.checked = !on; box.disabled = false; toast(err.message); }
+  }
   if (e.target.id === 'h-plan'){ H.plan = e.target.value; const s = S.catalog.services.find(x => x.id === H.service), p = s.plans.find(x => x.id === H.plan); H.markup = p.max_markup_pct; H.seats = p.max_seats; renderCreate(); }
   if (e.target.id === 'h-seats'){ H.seats = +e.target.value; const y = $('#sheet-box').scrollTop; renderCreate(); $('#sheet-box').scrollTop = y; }
 });
@@ -1370,6 +1522,7 @@ document.addEventListener('submit', async e => {
       break; }
     case 'f-fund': {
       const k = toKobo(val('f-amt')), st = settings();
+      if (!cardOn()){ if (st.manual_funding) $('[data-act=mdStart]').click(); else toast('Adding money is paused right now.'); break; }
       if (k < st.min_topup_kobo){ toast(`The smallest deposit is ${naira(st.min_topup_kobo)}.`); break; }
       if (k > st.max_topup_kobo){ toast(`The largest deposit is ${naira(st.max_topup_kobo)}.`); break; }
       startPay(btn, {purpose:'TOPUP', amount_kobo:k}); break; }
