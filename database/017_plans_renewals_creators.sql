@@ -1795,3 +1795,7 @@ grant execute on function
   public.admin_bulk_claim(uuid, int), public.admin_bulk_mark(uuid, jsonb), public.admin_bulk_cancel(uuid)
 to authenticated;
 grant execute on function public.payment_create(uuid, text, text, bigint, uuid, text, int, date), public.process_renewals() to service_role;
+
+-- fixed search path for the two small helpers (security advisor)
+alter function public._period_word(int) set search_path = public;
+alter function public._norm_phone(text) set search_path = public;
